@@ -407,6 +407,42 @@ void tcp_client_task(void *arg)
     }
     printf("IP Address %s assigned\n", ip4addr_ntoa(&net->ip_addr.u_addr.ip4));
 
+	/* Create a new TCP connection */
+	conn = netconn_new(NETCONN_TCP);
+
+	/* Connect to a specific remote IP address and port */
+	err = netconn_connect(conn, &remote, TCP_SERVER_PORT);
+	if(err == ERR_OK)
+	{
+		printf("Info: Connected to TCP Server\n");
+
+		if(err == ERR_OK)
+		{
+			//printf( "%d Bytes written: %s\n", tcp_pkt_buf.len, tcp_pkt_buf.text);
+
+//			/* Close the TCP connection and free its resources */
+//			err = netconn_delete(conn);
+//			if(err == ERR_OK)
+//			{
+//				printf("Info: Connection closed.\n");
+//			}
+//			else
+//			{
+//				printf("netconn_delete returned error. Error code: %d\n", err);
+//				CY_ASSERT(0);
+//			}
+		}
+		else
+		{
+			printf("netconn_write returned error. Error code: %d\n", err);
+			CY_ASSERT(0);
+		}
+	}
+	else
+	{
+		printf("netconn_connect returned error. Error code: %d\n", err);
+		CY_ASSERT(0);
+	}
 
     for(;;)
     {
@@ -414,46 +450,9 @@ void tcp_client_task(void *arg)
     	{
     		timer_interrupt_flag = false;
 
-			/* Create a new TCP connection */
-			conn = netconn_new(NETCONN_TCP);
-
-			/* Connect to a specific remote IP address and port */
-			err = netconn_connect(conn, &remote, TCP_SERVER_PORT);
-
-			if(err == ERR_OK)
-			{
-				printf("Info: Connected to TCP Server\n");
-
-				/* Send data over the TCP connection */
-				err = netconn_write(conn, tcp_pkt_buf.text , tcp_pkt_buf.len,
-									NETCONN_NOFLAG);
-				if(err == ERR_OK)
-				{
-					//printf( "%d Bytes written: %s\n", tcp_pkt_buf.len, tcp_pkt_buf.text);
-
-					/* Close the TCP connection and free its resources */
-					err = netconn_delete(conn);
-					if(err == ERR_OK)
-					{
-						printf("Info: Connection closed.\n");
-					}
-					else
-					{
-						printf("netconn_delete returned error. Error code: %d\n", err);
-						CY_ASSERT(0);
-					}
-				}
-				else
-				{
-					printf("netconn_write returned error. Error code: %d\n", err);
-					CY_ASSERT(0);
-				}
-			}
-			else
-			{
-				printf("netconn_connect returned error. Error code: %d\n", err);
-				CY_ASSERT(0);
-			}
+    		/* Send data over the TCP connection */
+    		err = netconn_write(conn, tcp_pkt_buf.text , tcp_pkt_buf.len,
+    							NETCONN_NOFLAG);
     	}
     }
  }
