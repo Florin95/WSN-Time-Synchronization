@@ -68,6 +68,7 @@
 #include "mbedtls/config.h"
 
 #include "network_credentials.h"
+#include "timer_config.h"
 
 /******************************************************************************
 * Macros
@@ -138,6 +139,12 @@ volatile int uxTopUsedPriority ;
 
 const size_t tcp_server_cert_len = sizeof( tcp_server_cert );
 
+/*******************************************************************************
+* Global Variables
+*******************************************************************************/
+bool led_blink_active_flag = true;
+tcp_data_packet_t tcp_pkt_buf;
+
 /******************************************************************************
  * Function Name: main
  ******************************************************************************
@@ -176,12 +183,34 @@ int main()
     printf("CE229112 - ModusToolbox Connectivity Example: TCP Client\n");
     printf("============================================================\n\n");
 
+	// ================================
+	sprintf(tcp_pkt_buf.text, " ");
+	int k = 0;
+	for (k = 0; k < 10; k++ )
+	{
+		strcat(tcp_pkt_buf.text, "12345 ");
+	}
+	tcp_pkt_buf.len = strlen(tcp_pkt_buf.text);
+	// ================================
+
+    /* Initialize timer to toggle the LED */
+    timer_init();
+
+//    for (;;)
+//    {
+//    	if (timer_interrupt_flag)
+//    	{
+//    		timer_interrupt_flag = false;
+//    		printf("ISR!\n");
+//    	}
+//    }
+
     /* Queue to Receive TCP packets */
     tcp_client_queue = xQueueCreate(TCP_CLIENT_TASK_QUEUE_LEN, sizeof(tcp_data_packet_t));
 
     /* Create the tasks */
-    xTaskCreate(led_task, "LED task", LED_TASK_STACK_SIZE, NULL,
-                LED_TASK_PRIORITY, &led_task_handle) ;
+//    xTaskCreate(led_task, "LED task", LED_TASK_STACK_SIZE, NULL,
+//                LED_TASK_PRIORITY, &led_task_handle) ;
     xTaskCreate(tcp_client_task, "Network task", TCP_CLIENT_TASK_STACK_SIZE, NULL,
                 TCP_CLIENT_TASK_PRIORITY, NULL);
 
@@ -208,24 +237,24 @@ int main()
  *  None
  *
  ******************************************************************************/
-void isr_button_press( void *callback_arg, cyhal_gpio_event_t event)
-{
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-
-    if(led_state == LED_ON)
-    {
-        led_state = LED_OFF;
-    }
-    else
-    {
-        led_state = LED_ON;
-    }
-    /* Notify the led_task about the change in LED state */
-    xTaskNotifyFromISR(led_task_handle, led_state, eSetValueWithoutOverwrite,
-                       &xHigherPriorityTaskWoken);
-
-    portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-}
+//void isr_button_press( void *callback_arg, cyhal_gpio_event_t event)
+//{
+//    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+//
+//    if(led_state == LED_ON)
+//    {
+//        led_state = LED_OFF;
+//    }
+//    else
+//    {
+//        led_state = LED_ON;
+//    }
+//    /* Notify the led_task about the change in LED state */
+//    xTaskNotifyFromISR(led_task_handle, led_state, eSetValueWithoutOverwrite,
+//                       &xHigherPriorityTaskWoken);
+//
+//    portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+//}
 
 /******************************************************************************
  * Function Name: led_task
@@ -240,49 +269,49 @@ void isr_button_press( void *callback_arg, cyhal_gpio_event_t event)
  *  void
  *
  ******************************************************************************/
-void led_task(void *args)
-{
-    /* Variable to track LED state */
-    uint32_t led_state;
-
-    /* TCP data packet */
-    tcp_data_packet_t tcp_pkt_led_state;
-
-    /* Initialize User button 1 and register interrupt on falling edge */
-    cyhal_gpio_init(CYBSP_USER_BTN, CYHAL_GPIO_DIR_INPUT,
-                    CYHAL_GPIO_DRIVE_PULLUP, 1);
-    cyhal_gpio_register_callback(CYBSP_USER_BTN, isr_button_press, NULL);
-    cyhal_gpio_enable_event(CYBSP_USER_BTN, CYHAL_GPIO_IRQ_FALL,
-                            USER_BTN1_INTR_PRIORITY, 1);
-
-    /* Initialize the User LED */
-    cyhal_gpio_init((cyhal_gpio_t) CYBSP_USER_LED, CYHAL_GPIO_DIR_OUTPUT,
-                    CYHAL_GPIO_DRIVE_PULLUP, CYBSP_LED_STATE_OFF);
-
-    while (true)
-    {
-        /* Block till USER_BNT1 is pressed */
-        xTaskNotifyWait(0, 0, &led_state, portMAX_DELAY);
-
-        /* Update LED state */
-        cyhal_gpio_write((cyhal_gpio_t) CYBSP_USER_LED, led_state);
-
-        if(led_state == LED_OFF)
-        {
-             sprintf(tcp_pkt_led_state.text, "LED OFF");
-             tcp_pkt_led_state.len = strlen(tcp_pkt_led_state.text);
-        }
-        else
-        {
-            sprintf(tcp_pkt_led_state.text, "LED ON");
-            tcp_pkt_led_state.len = strlen(tcp_pkt_led_state.text);
-        }
-
-        /* Send TCP data packet to the tcp_client_task */
-        xQueueSend(tcp_client_queue, &tcp_pkt_led_state,
-                   CLIENT_TASK_Q_TICKS_TO_TIMEOUT);
-   }
-}
+//void led_task(void *args)
+//{
+//    /* Variable to track LED state */
+//    uint32_t led_state;
+//
+//    /* TCP data packet */
+//    tcp_data_packet_t tcp_pkt_led_state;
+//
+//    /* Initialize User button 1 and register interrupt on falling edge */
+//    cyhal_gpio_init(CYBSP_USER_BTN, CYHAL_GPIO_DIR_INPUT,
+//                    CYHAL_GPIO_DRIVE_PULLUP, 1);
+//    cyhal_gpio_register_callback(CYBSP_USER_BTN, isr_button_press, NULL);
+//    cyhal_gpio_enable_event(CYBSP_USER_BTN, CYHAL_GPIO_IRQ_FALL,
+//                            USER_BTN1_INTR_PRIORITY, 1);
+//
+//    /* Initialize the User LED */
+//    cyhal_gpio_init((cyhal_gpio_t) CYBSP_USER_LED, CYHAL_GPIO_DIR_OUTPUT,
+//                    CYHAL_GPIO_DRIVE_PULLUP, CYBSP_LED_STATE_OFF);
+//
+//    while (true)
+//    {
+//        /* Block till USER_BNT1 is pressed */
+//        xTaskNotifyWait(0, 0, &led_state, portMAX_DELAY);
+//
+//        /* Update LED state */
+//        cyhal_gpio_write((cyhal_gpio_t) CYBSP_USER_LED, led_state);
+//
+//        if(led_state == LED_OFF)
+//        {
+//             sprintf(tcp_pkt_led_state.text, "LED OFF");
+//             tcp_pkt_led_state.len = strlen(tcp_pkt_led_state.text);
+//        }
+//        else
+//        {
+//            sprintf(tcp_pkt_led_state.text, "LED ON");
+//            tcp_pkt_led_state.len = strlen(tcp_pkt_led_state.text);
+//        }
+//
+//        /* Send TCP data packet to the tcp_client_task */
+//        xQueueSend(tcp_client_queue, &tcp_pkt_led_state,
+//                   CLIENT_TASK_Q_TICKS_TO_TIMEOUT);
+//   }
+//}
 
 /*******************************************************************************
  * Function Name: tcp_client_task
@@ -311,7 +340,7 @@ void tcp_client_task(void *arg)
             .u_addr.ip4.addr = TCP_SERVER_IP_ADDRESS,
             .type = IPADDR_TYPE_V4
     };
-    tcp_data_packet_t tcp_pkt_led_state;
+
 
     /* Variable to track the number of connection retries to the Wi-Fi AP specified
      * by WIFI_SSID macro */
@@ -378,56 +407,54 @@ void tcp_client_task(void *arg)
     }
     printf("IP Address %s assigned\n", ip4addr_ntoa(&net->ip_addr.u_addr.ip4));
 
+
     for(;;)
     {
-        printf("============================================================\n");
-        printf("Press user button SW2 to turn ON/OFF LED\n");
-        /* Block till TCP packet to be sent to the TCP server
-         * is received on the queue
-         */
-        xQueueReceive(tcp_client_queue, &tcp_pkt_led_state, portMAX_DELAY);
+    	if (timer_interrupt_flag)
+    	{
+    		timer_interrupt_flag = false;
 
-        /* Create a new TCP connection */
-        conn = netconn_new(NETCONN_TCP);
+			/* Create a new TCP connection */
+			conn = netconn_new(NETCONN_TCP);
 
-        /* Connect to a specific remote IP address and port */
-        err = netconn_connect(conn, &remote, TCP_SERVER_PORT);
+			/* Connect to a specific remote IP address and port */
+			err = netconn_connect(conn, &remote, TCP_SERVER_PORT);
 
-        if(err == ERR_OK)
-        {
-            printf("Info: Connected to TCP Server\n");
+			if(err == ERR_OK)
+			{
+				printf("Info: Connected to TCP Server\n");
 
-            /* Send data over the TCP connection */
-            err = netconn_write(conn, tcp_pkt_led_state.text , tcp_pkt_led_state.len,
-                                NETCONN_NOFLAG);
-            if(err == ERR_OK)
-            {
-                printf( "%d Bytes written: %s\n", tcp_pkt_led_state.len, tcp_pkt_led_state.text);
+				/* Send data over the TCP connection */
+				err = netconn_write(conn, tcp_pkt_buf.text , tcp_pkt_buf.len,
+									NETCONN_NOFLAG);
+				if(err == ERR_OK)
+				{
+					//printf( "%d Bytes written: %s\n", tcp_pkt_buf.len, tcp_pkt_buf.text);
 
-                /* Close the TCP connection and free its resources */
-                err = netconn_delete(conn);
-                if(err == ERR_OK)
-                {
-                    printf("Info: Connection closed.\n");
-                }
-                else
-                {
-                    printf("netconn_delete returned error. Error code: %d\n", err);
-                    CY_ASSERT(0);
-                }
-            }
-            else
-            {
-                printf("netconn_write returned error. Error code: %d\n", err);
-                CY_ASSERT(0);
-            }
-        }
-        else
-        {
-            printf("netconn_connect returned error. Error code: %d\n", err);
-            CY_ASSERT(0);
-        }
+					/* Close the TCP connection and free its resources */
+					err = netconn_delete(conn);
+					if(err == ERR_OK)
+					{
+						printf("Info: Connection closed.\n");
+					}
+					else
+					{
+						printf("netconn_delete returned error. Error code: %d\n", err);
+						CY_ASSERT(0);
+					}
+				}
+				else
+				{
+					printf("netconn_write returned error. Error code: %d\n", err);
+					CY_ASSERT(0);
+				}
+			}
+			else
+			{
+				printf("netconn_connect returned error. Error code: %d\n", err);
+				CY_ASSERT(0);
+			}
+    	}
     }
  }
 
-/* [] END OF FILE */
