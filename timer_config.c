@@ -1,6 +1,9 @@
 #include "cyhal.h"
 #include "timer_config.h"
 
+static void isr_timer(void *callback_arg, cyhal_timer_event_t event);
+
+
 bool timer_interrupt_flag = false;
 /* Timer object used for blinking the LED */
 cyhal_timer_t tcp_send_timer;

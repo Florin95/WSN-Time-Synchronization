@@ -83,7 +83,7 @@
 /* Change the server IP address to match the TCP echo server address (IP address
  * of the PC)
  */
-#define TCP_SERVER_IP_ADDRESS             MAKE_IPV4_ADDRESS(192, 168, 1, 2)
+#define TCP_SERVER_IP_ADDRESS             MAKE_IPV4_ADDRESS(192, 168, 137, 1)
 
 #define TCP_SERVER_PORT      50007
 #define TCP_SERVER_HOSTNAME  "mytcpsecureserver"
@@ -108,15 +108,13 @@ QueueHandle_t tcp_client_queue;
 /* Data structure to TCP data and data length */
 typedef struct
 {
-    char text[20];
+    char text[150];
     uint8_t len;
 }tcp_data_packet_t;
 
 /******************************************************************************
 * Function Prototypes
 ******************************************************************************/
-void isr_button_press( void *callback_arg, cyhal_gpio_event_t event);
-void led_task(void *args);
 void tcp_client_task(void *arg);
 
 /******************************************************************************
@@ -134,15 +132,12 @@ TaskHandle_t led_task_handle;
 /* Handle of the Queue to send TCP data packets */
 QueueHandle_t tcpClientQ;
 
+/* Connection */
+struct netconn *conn;
+
 /* This enables RTOS aware debugging */
 volatile int uxTopUsedPriority ;
-
 const size_t tcp_server_cert_len = sizeof( tcp_server_cert );
-
-/*******************************************************************************
-* Global Variables
-*******************************************************************************/
-bool led_blink_active_flag = true;
 tcp_data_packet_t tcp_pkt_buf;
 
 /******************************************************************************
@@ -186,31 +181,21 @@ int main()
 	// ================================
 	sprintf(tcp_pkt_buf.text, " ");
 	int k = 0;
-	for (k = 0; k < 10; k++ )
+	strcpy(tcp_pkt_buf.text, "123456 ");
+	for (k = 0; k < 19; k++ )
 	{
-		strcat(tcp_pkt_buf.text, "12345 ");
+		strcat(tcp_pkt_buf.text, "123456 ");
 	}
 	tcp_pkt_buf.len = strlen(tcp_pkt_buf.text);
+	printf("Text size = %d\n", tcp_pkt_buf.len);
 	// ================================
 
     /* Initialize timer to toggle the LED */
     timer_init();
 
-//    for (;;)
-//    {
-//    	if (timer_interrupt_flag)
-//    	{
-//    		timer_interrupt_flag = false;
-//    		printf("ISR!\n");
-//    	}
-//    }
-
     /* Queue to Receive TCP packets */
     tcp_client_queue = xQueueCreate(TCP_CLIENT_TASK_QUEUE_LEN, sizeof(tcp_data_packet_t));
 
-    /* Create the tasks */
-//    xTaskCreate(led_task, "LED task", LED_TASK_STACK_SIZE, NULL,
-//                LED_TASK_PRIORITY, &led_task_handle) ;
     xTaskCreate(tcp_client_task, "Network task", TCP_CLIENT_TASK_STACK_SIZE, NULL,
                 TCP_CLIENT_TASK_PRIORITY, NULL);
 
@@ -221,97 +206,22 @@ int main()
     CY_ASSERT(0);
 }
 
-/*******************************************************************************
- * Function Name: isr_button_press
- *******************************************************************************
- *
- * Summary:
- *  GPIO interrupt service routine. This function detects button
- *  presses and sends task notifications to the TCP client task.
- *
- * Parameters:
- *  void *callback_arg : pointer to variable passed to the ISR
- *  cyhal_gpio_event_t event : GPIO event type
- *
- * Return:
- *  None
- *
- ******************************************************************************/
-//void isr_button_press( void *callback_arg, cyhal_gpio_event_t event)
-//{
-//    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-//
-//    if(led_state == LED_ON)
-//    {
-//        led_state = LED_OFF;
-//    }
-//    else
-//    {
-//        led_state = LED_ON;
-//    }
-//    /* Notify the led_task about the change in LED state */
-//    xTaskNotifyFromISR(led_task_handle, led_state, eSetValueWithoutOverwrite,
-//                       &xHigherPriorityTaskWoken);
-//
-//    portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-//}
+/* Close the TCP connection and free its resources */
+void close_tcp_connection()
+{
+	/* Close the TCP connection and free its resources */
+	err = netconn_delete(conn);
 
-/******************************************************************************
- * Function Name: led_task
- ******************************************************************************
- * Summary:
- *  Task that toggles the LED state on every button (SW2) presses
- *
- * Parameters:
- *  void *args : Task parameter defined during task creation (unused)
- *
- * Return:
- *  void
- *
- ******************************************************************************/
-//void led_task(void *args)
-//{
-//    /* Variable to track LED state */
-//    uint32_t led_state;
-//
-//    /* TCP data packet */
-//    tcp_data_packet_t tcp_pkt_led_state;
-//
-//    /* Initialize User button 1 and register interrupt on falling edge */
-//    cyhal_gpio_init(CYBSP_USER_BTN, CYHAL_GPIO_DIR_INPUT,
-//                    CYHAL_GPIO_DRIVE_PULLUP, 1);
-//    cyhal_gpio_register_callback(CYBSP_USER_BTN, isr_button_press, NULL);
-//    cyhal_gpio_enable_event(CYBSP_USER_BTN, CYHAL_GPIO_IRQ_FALL,
-//                            USER_BTN1_INTR_PRIORITY, 1);
-//
-//    /* Initialize the User LED */
-//    cyhal_gpio_init((cyhal_gpio_t) CYBSP_USER_LED, CYHAL_GPIO_DIR_OUTPUT,
-//                    CYHAL_GPIO_DRIVE_PULLUP, CYBSP_LED_STATE_OFF);
-//
-//    while (true)
-//    {
-//        /* Block till USER_BNT1 is pressed */
-//        xTaskNotifyWait(0, 0, &led_state, portMAX_DELAY);
-//
-//        /* Update LED state */
-//        cyhal_gpio_write((cyhal_gpio_t) CYBSP_USER_LED, led_state);
-//
-//        if(led_state == LED_OFF)
-//        {
-//             sprintf(tcp_pkt_led_state.text, "LED OFF");
-//             tcp_pkt_led_state.len = strlen(tcp_pkt_led_state.text);
-//        }
-//        else
-//        {
-//            sprintf(tcp_pkt_led_state.text, "LED ON");
-//            tcp_pkt_led_state.len = strlen(tcp_pkt_led_state.text);
-//        }
-//
-//        /* Send TCP data packet to the tcp_client_task */
-//        xQueueSend(tcp_client_queue, &tcp_pkt_led_state,
-//                   CLIENT_TASK_Q_TICKS_TO_TIMEOUT);
-//   }
-//}
+	if(err == ERR_OK)
+	{
+		printf("Info: Connection closed.\n");
+	}
+	else
+	{
+		printf("netconn_delete returned error. Error code: %d\n", err);
+		CY_ASSERT(0);
+	}
+}
 
 /*******************************************************************************
  * Function Name: tcp_client_task
@@ -335,7 +245,6 @@ void tcp_client_task(void *arg)
     const char *ssid = WIFI_SSID;
     const char *key = WIFI_PASSWORD;
     struct netif *net;
-    struct netconn *conn;
     struct ip_addr remote = {
             .u_addr.ip4.addr = TCP_SERVER_IP_ADDRESS,
             .type = IPADDR_TYPE_V4
@@ -412,33 +321,8 @@ void tcp_client_task(void *arg)
 
 	/* Connect to a specific remote IP address and port */
 	err = netconn_connect(conn, &remote, TCP_SERVER_PORT);
-	if(err == ERR_OK)
-	{
-		printf("Info: Connected to TCP Server\n");
 
-		if(err == ERR_OK)
-		{
-			//printf( "%d Bytes written: %s\n", tcp_pkt_buf.len, tcp_pkt_buf.text);
-
-//			/* Close the TCP connection and free its resources */
-//			err = netconn_delete(conn);
-//			if(err == ERR_OK)
-//			{
-//				printf("Info: Connection closed.\n");
-//			}
-//			else
-//			{
-//				printf("netconn_delete returned error. Error code: %d\n", err);
-//				CY_ASSERT(0);
-//			}
-		}
-		else
-		{
-			printf("netconn_write returned error. Error code: %d\n", err);
-			CY_ASSERT(0);
-		}
-	}
-	else
+	if(err != ERR_OK)
 	{
 		printf("netconn_connect returned error. Error code: %d\n", err);
 		CY_ASSERT(0);
