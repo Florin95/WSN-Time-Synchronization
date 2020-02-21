@@ -1,43 +1,3 @@
-/******************************************************************************
-* File Name:   main.c
-*
-* Description: This is the source code for TCP Secure Client Example in
-* ModusToolbox.
-*
-* Related Document: See Readme.md
-*
-*******************************************************************************
-* (c) 2019, Cypress Semiconductor Corporation. All rights reserved.
-*******************************************************************************
-* This software, including source code, documentation and related materials
-* ("Software"), is owned by Cypress Semiconductor Corporation or one of its
-* subsidiaries ("Cypress") and is protected by and subject to worldwide patent
-* protection (United States and foreign), United States copyright laws and
-* international treaty provisions. Therefore, you may use this Software only
-* as provided in the license agreement accompanying the software package from
-* which you obtained this Software ("EULA").
-*
-* If no EULA applies, Cypress hereby grants you a personal, non-exclusive,
-* non-transferable license to copy, modify, and compile the Software source
-* code solely for use in connection with Cypress's integrated circuit products.
-* Any reproduction, modification, translation, compilation, or representation
-* of this Software except as specified above is prohibited without the express
-* written permission of Cypress.
-*
-* Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO WARRANTY OF ANY KIND,
-* EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, NONINFRINGEMENT, IMPLIED
-* WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. Cypress
-* reserves the right to make changes to the Software without notice. Cypress
-* does not assume any liability arising out of the application or use of the
-* Software or any product or circuit described in the Software. Cypress does
-* not authorize its products for use in any products where a malfunction or
-* failure of the Cypress product may reasonably be expected to result in
-* significant property damage, injury or death ("High Risk Product"). By
-* including Cypress's product in a High Risk Product, the manufacturer of such
-* system or application assumes all risk of such use and in doing so agrees to
-* indemnify Cypress against all liability.
-*******************************************************************************/
-
 /* Header file includes */
 #include "cyhal.h"
 #include "cybsp.h"
@@ -69,6 +29,10 @@
 
 #include "network_credentials.h"
 #include "timer_config.h"
+#include "SpiDma.h"
+#include "SPIMaster.h"
+#include "SPISlave.h"
+#include "Interface.h"
 
 /******************************************************************************
 * Macros
@@ -102,20 +66,35 @@
 #define CLIENT_TASK_Q_TICKS_TO_TIMEOUT    (100)
 #define RTOS_TASK_TICKS_TO_WAIT           (100)
 
+/* Size is in bytes. */
+#define NUMBER_OF_SAMPLES				  (480)
+#define PROTOCOL_OVERHEAD                 (4+4+4)
+
+/* Number of elements in the transmit and receive buffer */
+/* There are three elements - one for head, one for command and one for tail */
+#define NUMBER_OF_ELEMENTS	(5UL)
+#define SIZE_OF_ELEMENT		(4UL)
+#define SIZE_OF_PACKET		(NUMBER_OF_ELEMENTS * SIZE_OF_ELEMENT)
+
+/* Delay between successive SPI Master command transmissions */
+#define CMD_DELAY			(1000)	//in milliseconds
+
 /* Handle of the Queue to send TCP data packets */
 QueueHandle_t tcp_client_queue;
 
 /* Data structure to TCP data and data length */
 typedef struct
 {
-    char text[150];
-    uint8_t len;
+	/* Buffer to hold SPI data to be sent via Wi-Fi */
+	uint8_t txBuffer[NUMBER_OF_SAMPLES + PROTOCOL_OVERHEAD];
+    uint16_t len;
 }tcp_data_packet_t;
 
 /******************************************************************************
 * Function Prototypes
 ******************************************************************************/
 void tcp_client_task(void *arg);
+void handle_error(void);
 
 /******************************************************************************
 * Global Variables
@@ -161,6 +140,34 @@ int main()
     /* This enables RTOS aware debugging in OpenOCD */
     uxTopUsedPriority = configMAX_PRIORITIES - 1;
 
+    /* Set up internal routing, pins, and clock-to-peripheral connections */
+	init_cycfg_all();
+
+	uint32 status = 0;
+
+    /* Initialize the SPI Slave */
+	status = initSlave();
+	if(status == INIT_FAILURE)
+	{
+		/* NOTE: This function will block the CPU forever */
+		handle_error();
+	}
+
+	/* Initialize the SPI Master */
+    status = initMaster();
+    if(status == INIT_FAILURE)
+	{
+		/* NOTE: This function will block the CPU forever */
+		handle_error();
+	}
+
+//    status = ConfigureTxDma((uint32_t*)tcp_pkt_buf.txBuffer);
+//    if(status == INIT_FAILURE)
+//	{
+//		/* NOTE: This function will block the CPU forever */
+//		handle_error();
+//	}
+
     /* Initialize the board support package */
     result = cybsp_init() ;
     CY_ASSERT(result == CY_RSLT_SUCCESS);
@@ -178,20 +185,73 @@ int main()
     printf("CE229112 - ModusToolbox Connectivity Example: TCP Client\n");
     printf("============================================================\n\n");
 
-	// ================================
-	sprintf(tcp_pkt_buf.text, " ");
-	int k = 0;
-	strcpy(tcp_pkt_buf.text, "123456 ");
-	for (k = 0; k < 19; k++ )
-	{
-		strcat(tcp_pkt_buf.text, "123456 ");
-	}
-	tcp_pkt_buf.len = strlen(tcp_pkt_buf.text);
-	printf("Text size = %d\n", tcp_pkt_buf.len);
-	// ================================
-
-    /* Initialize timer to toggle the LED */
+    /* Initialize timer to trigger TCP data transmission. */
     timer_init();
+
+
+	/* Buffer to hold command packet to be sent to the slave by the master */
+	uint8  txBuffer[5];
+
+	/* Buffer to save the received data by the slave */
+	uint32 rxBuffer[5];
+
+	int nr = 0;
+
+    for(;;)
+    {
+    	/* Form the command packet */
+    	txBuffer[0] = 64;
+    	txBuffer[1] = 65;
+    	txBuffer[2] = 66;
+    	txBuffer[3] = 67;
+    	txBuffer[4] = 68;
+
+    	/* Pass the command packet to the master along with the number of bytes to be
+    	 * sent to the slave.*/
+		sendPacket(txBuffer);
+
+		printf("%d. Send Packet done!\n", nr);
+		nr++;
+
+		//status = checkTranferStatus();
+		status = TRANSFER_COMPLETE;
+
+		/* Check whether the master succeeded in transferring data */
+		if(status == TRANSFER_COMPLETE)
+		{
+			printf("TRANSFER to slave COMPLETE!\n");
+			/* The below code is for slave function. It is implemented in this same code
+			 * example so that the master function can be tested without the need of one
+			 * more kit. */
+
+			/* Get the bytes received by the slave */
+			status = readPacket(rxBuffer, SIZE_OF_PACKET);
+
+			/* Check whether the slave succeeded in receiving the required number of bytes
+			 * and in the right format */
+			if(status == TRANSFER_COMPLETE)
+			{
+				/* Communication succeeded. */
+				printf(" %lu \n", rxBuffer[PACKET_CMD_POS]);
+			}
+			else
+			{
+				/* Communication failed */
+				handle_error();
+			}
+		}
+		else
+		{
+			/* Communication failed */
+			handle_error();
+		}
+
+		/* Give delay before initiating the next command */
+		Cy_SysLib_Delay(CMD_DELAY/10);
+    }
+
+
+
 
     /* Queue to Receive TCP packets */
     tcp_client_queue = xQueueCreate(TCP_CLIENT_TASK_QUEUE_LEN, sizeof(tcp_data_packet_t));
@@ -210,7 +270,7 @@ int main()
 void close_tcp_connection()
 {
 	/* Close the TCP connection and free its resources */
-	err = netconn_delete(conn);
+	err_t err = netconn_delete(conn);
 
 	if(err == ERR_OK)
 	{
@@ -335,9 +395,31 @@ void tcp_client_task(void *arg)
     		timer_interrupt_flag = false;
 
     		/* Send data over the TCP connection */
-    		err = netconn_write(conn, tcp_pkt_buf.text , tcp_pkt_buf.len,
+    		err = netconn_write(conn, tcp_pkt_buf.txBuffer , tcp_pkt_buf.len,
     							NETCONN_NOFLAG);
     	}
     }
  }
 
+/******************************************************************************
+* Function Name: handle_error
+*******************************************************************************
+*
+* Summary: 		This is a blocking function. It disables the interrupt and waits
+* 				in an infinite loop. This function is called when an error is
+* 				encountered during initialization of the blocks or during
+* 				SPI communication.
+*
+* Parameters: 	None
+*
+* Return:		None
+*
+******************************************************************************/
+void handle_error(void)
+{
+     /* Disable all interrupts. */
+    __disable_irq();
+
+    /* Infinite loop. */
+    while(1u) {}
+}
