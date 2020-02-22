@@ -210,7 +210,7 @@ int main()
 void close_tcp_connection()
 {
 	/* Close the TCP connection and free its resources */
-	err = netconn_delete(conn);
+	err_t err = netconn_delete(conn);
 
 	if(err == ERR_OK)
 	{
