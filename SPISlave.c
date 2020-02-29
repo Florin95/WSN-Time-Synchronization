@@ -39,15 +39,15 @@
 #include "Interface.h"
 
 /* Assign pins for SPI on SCB2: P9[0], P9[1], P9[2] and P9[3] */
-#define SPI_PORT        P9_0_PORT
-#define SPI_MOSI_NUM    P9_0_NUM
-#define SPI_MISO_NUM    P9_1_NUM
-#define SPI_SCLK_NUM    P9_2_NUM
-#define SPI_SS_NUM      P9_3_NUM
+#define SPI_PORT        P6_0_PORT
+#define SPI_MOSI_NUM    P6_0_NUM
+#define SPI_MISO_NUM    P6_1_NUM
+#define SPI_SCLK_NUM    P6_2_NUM
+#define SPI_SS_NUM      P6_3_NUM
 
 /* Assign divider type and number for SPI */
 #define SPI_CLK_DIV_TYPE    (CY_SYSCLK_DIV_8_BIT)
-#define SPI_CLK_DIV_NUM     (5U)
+#define SPI_CLK_DIV_NUM     (0U)
 
 const cy_stc_scb_spi_config_t sSPI_config =
 {
@@ -67,9 +67,9 @@ const cy_stc_scb_spi_config_t sSPI_config =
 				 (CY_SCB_SPI_ACTIVE_LOW << CY_SCB_SPI_SLAVE_SELECT2) | \
 				 (CY_SCB_SPI_ACTIVE_LOW << CY_SCB_SPI_SLAVE_SELECT3)),
 	.enableWakeFromSleep = false,
-	.rxFifoTriggerLevel = 0UL,
+	.rxFifoTriggerLevel = 63UL,
 	.rxFifoIntEnableMask = 0UL,
-	.txFifoTriggerLevel = 0UL,
+	.txFifoTriggerLevel = 63UL,
 	.txFifoIntEnableMask = 0UL,
 	.masterSlaveIntEnableMask = 0UL,
 };
@@ -80,12 +80,12 @@ const cy_stc_scb_spi_config_t sSPI_config =
 void AssignAndConfigurePinsSlave()
 {
 	/* Connect SCB2 SPI function to pins */
-	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_MISO_NUM, P9_1_SCB2_SPI_MISO);
-	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_MOSI_NUM, P9_0_SCB2_SPI_MOSI);
-	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_SCLK_NUM, P9_2_SCB2_SPI_CLK);
-	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_SS_NUM,   P9_3_SCB2_SPI_SELECT0);
+	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_MISO_NUM, P6_1_SCB3_SPI_MISO);
+	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_MOSI_NUM, P6_0_SCB3_SPI_MOSI);
+	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_SCLK_NUM, P6_2_SCB3_SPI_CLK);
+	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_SS_NUM,   P6_3_SCB3_SPI_SELECT0);
 
-    /* Configure SCB1 pins for SPI Slave operation */
+    /* Configure SCB2 pins for SPI Slave operation */
     Cy_GPIO_SetDrivemode(SPI_PORT, SPI_MISO_NUM, CY_GPIO_DM_STRONG_IN_OFF);
     Cy_GPIO_SetDrivemode(SPI_PORT, SPI_MOSI_NUM, CY_GPIO_DM_HIGHZ);
     Cy_GPIO_SetDrivemode(SPI_PORT, SPI_SCLK_NUM, CY_GPIO_DM_HIGHZ);
@@ -121,7 +121,7 @@ uint32 initSlave(void)
 	AssignAndConfigurePinsSlave();
 
 	/* Connect assigned divider to be a clock source for SPI */
-	Cy_SysClk_PeriphAssignDivider(PCLK_SCB2_CLOCK, SPI_CLK_DIV_TYPE, SPI_CLK_DIV_NUM);
+	Cy_SysClk_PeriphAssignDivider(PCLK_SCB3_CLOCK, SPI_CLK_DIV_TYPE, SPI_CLK_DIV_NUM);
 
 	/* SPI data rate is defined by the SPI master because it drives SCLK.
 	* This clk_scb enables SPI slave operate up to maximum supported data rate.
@@ -164,8 +164,8 @@ uint32 readPacket(uint32 *rxBuffer, uint32 transferSize)
 	/* Wait till all the bytes are received */
     while(Cy_SCB_SPI_GetNumInRxFifo(sSPI_HW) != transferSize)
     {
-    	if (Cy_SCB_SPI_GetNumInRxFifo(sSPI_HW)!= 0)
-    		printf("Received = %lu\n", Cy_SCB_SPI_GetNumInRxFifo(sSPI_HW));
+//    	if (Cy_SCB_SPI_GetNumInRxFifo(sSPI_HW)!= 0)
+//    		printf("Received = %lu\n", Cy_SCB_SPI_GetNumInRxFifo(sSPI_HW));
     }
 
 	/* Read RX FIFO */

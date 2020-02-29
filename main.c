@@ -52,10 +52,6 @@
 #define TCP_SERVER_PORT      50007
 #define TCP_SERVER_HOSTNAME  "mytcpsecureserver"
 
-/* 32-bit task notification value for the led_task */
-#define LED_ON                            (0x00lu)
-#define LED_OFF                           (0x01lu)
-
 #define USER_BTN1_INTR_PRIORITY           (5)
 
 #define LED_TASK_STACK_SIZE               (128)
@@ -70,14 +66,22 @@
 #define NUMBER_OF_SAMPLES				  (480)
 #define PROTOCOL_OVERHEAD                 (4+4+4)
 
-/* Number of elements in the transmit and receive buffer */
-/* There are three elements - one for head, one for command and one for tail */
-#define NUMBER_OF_ELEMENTS	(5UL)
-#define SIZE_OF_ELEMENT		(4UL)
-#define SIZE_OF_PACKET		(NUMBER_OF_ELEMENTS * SIZE_OF_ELEMENT)
+/* Delay between successive SPI Master command transmissions */
+#define CMD_DELAY			(1000)	//in milliseconds
+
+/* LED States. LEDs in the supported kits are in active low connection. */
+#define LED_ON 				(0)
+#define LED_OFF				(1)
 
 /* Delay between successive SPI Master command transmissions */
 #define CMD_DELAY			(1000)	//in milliseconds
+
+/* Number of elements in the transmit and receive buffer */
+/* There are three elements - one for head, one for command and one for tail */
+#define NUMBER_OF_ELEMENTS	(3UL)
+#define SIZE_OF_ELEMENT		(4UL)
+#define SIZE_OF_PACKET		(NUMBER_OF_ELEMENTS * SIZE_OF_ELEMENT)
+
 
 /* Handle of the Queue to send TCP data packets */
 QueueHandle_t tcp_client_queue;
@@ -119,6 +123,16 @@ volatile int uxTopUsedPriority ;
 const size_t tcp_server_cert_len = sizeof( tcp_server_cert );
 tcp_data_packet_t tcp_pkt_buf;
 
+#define sSPI_MOSI				(P10_0)
+#define sSPI_MISO				(P10_1)
+#define sSPI_SCLK				(P10_2)
+#define sSPI_SS					(P10_3)
+
+#define mSPI_MOSI				(P6_0)
+#define mSPI_MISO				(P6_1)
+#define mSPI_SCLK				(P6_2)
+#define mSPI_SS					(P6_3)
+
 /******************************************************************************
  * Function Name: main
  ******************************************************************************
@@ -135,135 +149,179 @@ tcp_data_packet_t tcp_pkt_buf;
  ******************************************************************************/
 int main()
 {
-    cy_rslt_t result;
-
-    /* This enables RTOS aware debugging in OpenOCD */
-    uxTopUsedPriority = configMAX_PRIORITIES - 1;
-
-    /* Set up internal routing, pins, and clock-to-peripheral connections */
-	init_cycfg_all();
-
-	uint32 status = 0;
-
-    /* Initialize the SPI Slave */
-	status = initSlave();
-	if(status == INIT_FAILURE)
-	{
-		/* NOTE: This function will block the CPU forever */
-		handle_error();
-	}
-
-	/* Initialize the SPI Master */
-    status = initMaster();
-    if(status == INIT_FAILURE)
-	{
-		/* NOTE: This function will block the CPU forever */
-		handle_error();
-	}
-
-//    status = ConfigureTxDma((uint32_t*)tcp_pkt_buf.txBuffer);
+//    cy_rslt_t result;
+//
+//    /* This enables RTOS aware debugging in OpenOCD */
+//    uxTopUsedPriority = configMAX_PRIORITIES - 1;
+//
+//    /* Set up internal routing, pins, and clock-to-peripheral connections */
+//	init_cycfg_all();
+//
+//	uint32 status = 0;
+//
+//    /* Initialize the SPI Slave */
+//	status = initSlave();
+//	if(status == INIT_FAILURE)
+//	{
+//		/* NOTE: This function will block the CPU forever */
+//		handle_error();
+//	}
+//
+//	/* Initialize the SPI Master */
+//    status = initMaster();
 //    if(status == INIT_FAILURE)
 //	{
 //		/* NOTE: This function will block the CPU forever */
 //		handle_error();
 //	}
+//
+////    status = ConfigureTxDma((uint32_t*)tcp_pkt_buf.txBuffer);
+////    if(status == INIT_FAILURE)
+////	{
+////		/* NOTE: This function will block the CPU forever */
+////		handle_error();
+////	}
+//
+//    /* Initialize the board support package */
+//    result = cybsp_init() ;
+//    CY_ASSERT(result == CY_RSLT_SUCCESS);
+//
+//    /* Enable global interrupts */
+//    __enable_irq();
+//
+//    /* Initialize retarget-io to use the debug UART port */
+//    cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX,
+//                        CY_RETARGET_IO_BAUDRATE);
+//
+//    /* \x1b[2J\x1b[;H - ANSI ESC sequence to clear screen */
+//    printf("\x1b[2J\x1b[;H");
+//    printf("============================================================\n");
+//    printf("CE229112 - ModusToolbox Connectivity Example: TCP Client\n");
+//    printf("============================================================\n\n");
+//
+//    /* Initialize timer to trigger TCP data transmission. */
+//    timer_init();
+//
+//	/* Buffer to hold command packet to be sent to the slave by the master */
+//	uint32  txBuffer[NUMBER_OF_ELEMENTS];
+//
+//	/* Buffer to save the received data by the slave */
+//	uint32  rxBuffer[NUMBER_OF_ELEMENTS];
+//
+//
+//	/* Local command variable */
+//	uint32 cmd = LED_OFF;
 
-    /* Initialize the board support package */
-    result = cybsp_init() ;
-    CY_ASSERT(result == CY_RSLT_SUCCESS);
+    cy_rslt_t result;
+    /* Set up the device based on configurator selections */
+    result = cybsp_init();
+	if(result != CY_RSLT_SUCCESS)
+	{
+		handle_error();
+	}
+    result = cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX, CY_RETARGET_IO_BAUDRATE);
+    if(result != CY_RSLT_SUCCESS)
+    {
+    	handle_error();
+    }
 
-    /* Enable global interrupts */
+    /* \x1b[2J\x1b[;H - ANSI ESC sequence for clear screen */
+    printf("\x1b[2J\x1b[;H");
+
+    printf("**************************\r\n");
+    printf("PSoC 6 MCU SPI Master\r\n");
+    printf("**************************\r\n\n");
+
+    cyhal_spi_t mSPI;
+    cyhal_spi_t sSPI;
+
+    /* Configure user LED */
+    printf(">> Configure user LED \r\n");
+    result = cyhal_gpio_init((cyhal_gpio_t)CYBSP_USER_LED, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, CYBSP_LED_STATE_OFF);
+	if(result != CY_RSLT_SUCCESS)
+	{
+		handle_error();
+	}
+
+    /* Configure SPI Master */
+    printf(">> Configure SPI master \r\n");
+    result = cyhal_spi_init(&mSPI, mSPI_MOSI, mSPI_MISO, mSPI_SCLK, mSPI_SS, NULL, 8, CYHAL_SPI_MODE_00_MSB, false);
+    if(result != CY_SCB_SPI_SUCCESS)
+    {
+    	handle_error();
+    }
+    result = cyhal_spi_set_frequency(&mSPI, 1000000);
+    if(result != CY_SCB_SPI_SUCCESS)
+    {
+    	handle_error();
+    }
+
+    /* Configure SPI Slave */
+    printf(">> Configure SPI slave \r\n\n");
+    result = cyhal_spi_init(&sSPI, sSPI_MOSI, sSPI_MISO, sSPI_SCLK, sSPI_SS, NULL, 8, CYHAL_SPI_MODE_00_MSB, true);
+    if(result != CY_SCB_SPI_SUCCESS)
+    {
+    	handle_error();
+    }
+    result = cyhal_spi_set_frequency(&sSPI, 1000000);
+    if(result != CY_SCB_SPI_SUCCESS)
+    {
+    	handle_error();
+    }
+
+    uint32_t cmd_send = true;
+    uint32_t cmd_recv = false;
+
+    /* Enable interrupts */
     __enable_irq();
 
-    /* Initialize retarget-io to use the debug UART port */
-    cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX,
-                        CY_RETARGET_IO_BAUDRATE);
-
-    /* \x1b[2J\x1b[;H - ANSI ESC sequence to clear screen */
-    printf("\x1b[2J\x1b[;H");
-    printf("============================================================\n");
-    printf("CE229112 - ModusToolbox Connectivity Example: TCP Client\n");
-    printf("============================================================\n\n");
-
-    /* Initialize timer to trigger TCP data transmission. */
-    timer_init();
-
-
-	/* Buffer to hold command packet to be sent to the slave by the master */
-	uint8  txBuffer[5];
-
-	/* Buffer to save the received data by the slave */
-	uint32 rxBuffer[5];
-
-	int nr = 0;
+    printf("User LED should start blinking \r\n");
 
     for(;;)
     {
-    	/* Form the command packet */
-    	txBuffer[0] = 64;
-    	txBuffer[1] = 65;
-    	txBuffer[2] = 66;
-    	txBuffer[3] = 67;
-    	txBuffer[4] = 68;
+    	/* Toggle the current LED state */
+    	cmd_send = (cmd_send == true) ? false : true;
 
-    	/* Pass the command packet to the master along with the number of bytes to be
-    	 * sent to the slave.*/
-		sendPacket(txBuffer);
-
-		printf("%d. Send Packet done!\n", nr);
-		nr++;
-
-		//status = checkTranferStatus();
-		status = TRANSFER_COMPLETE;
-
-		/* Check whether the master succeeded in transferring data */
-		if(status == TRANSFER_COMPLETE)
+    	/* Send packet with command to the slave. */
+        if (CY_RSLT_SUCCESS == cyhal_spi_send(&mSPI, cmd_send))
 		{
-			printf("TRANSFER to slave COMPLETE!\n");
-			/* The below code is for slave function. It is implemented in this same code
-			 * example so that the master function can be tested without the need of one
-			 * more kit. */
+        	/* The below code is for slave function. It is implemented in
+        	   this code example so that the master function can be tested
+        	   without the need of one more kit. */
 
-			/* Get the bytes received by the slave */
-			status = readPacket(rxBuffer, SIZE_OF_PACKET);
-
-			/* Check whether the slave succeeded in receiving the required number of bytes
-			 * and in the right format */
-			if(status == TRANSFER_COMPLETE)
+			/* Read command packet at slave */
+			if (CY_SCB_I2C_SUCCESS == cyhal_spi_recv(&sSPI, &cmd_recv))
 			{
-				/* Communication succeeded. */
-				printf(" %lu \n", rxBuffer[PACKET_CMD_POS]);
+				/* Execute command */
+				cyhal_gpio_write((cyhal_gpio_t)CYBSP_USER_LED, cmd_recv);
 			}
 			else
 			{
-				/* Communication failed */
 				handle_error();
 			}
 		}
-		else
-		{
-			/* Communication failed */
-			handle_error();
-		}
-
-		/* Give delay before initiating the next command */
-		Cy_SysLib_Delay(CMD_DELAY/10);
+        else
+        {
+        	handle_error();
+        }
+		/* Give delay between commands. */
+		Cy_SysLib_Delay(CMD_DELAY);
     }
 
 
 
 
-    /* Queue to Receive TCP packets */
-    tcp_client_queue = xQueueCreate(TCP_CLIENT_TASK_QUEUE_LEN, sizeof(tcp_data_packet_t));
-
-    xTaskCreate(tcp_client_task, "Network task", TCP_CLIENT_TASK_STACK_SIZE, NULL,
-                TCP_CLIENT_TASK_PRIORITY, NULL);
-
-    /* Start the FreeRTOS scheduler */
-    vTaskStartScheduler();
-
-    /* Should never get here */
-    CY_ASSERT(0);
+//    /* Queue to Receive TCP packets */
+//    tcp_client_queue = xQueueCreate(TCP_CLIENT_TASK_QUEUE_LEN, sizeof(tcp_data_packet_t));
+//
+//    xTaskCreate(tcp_client_task, "Network task", TCP_CLIENT_TASK_STACK_SIZE, NULL,
+//                TCP_CLIENT_TASK_PRIORITY, NULL);
+//
+//    /* Start the FreeRTOS scheduler */
+//    vTaskStartScheduler();
+//
+//    /* Should never get here */
+//    CY_ASSERT(0);
 }
 
 /* Close the TCP connection and free its resources */

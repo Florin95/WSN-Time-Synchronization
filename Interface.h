@@ -41,7 +41,7 @@
 #include "cy_pdl.h"
 #include "cycfg.h"
 
-#define mSPI_HW SCB1
+#define mSPI_HW SCB2
 #define txDma_HW DW0
 #define txDma_CHANNEL 2U
 

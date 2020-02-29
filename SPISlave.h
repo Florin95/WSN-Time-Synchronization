@@ -41,7 +41,7 @@
 #include "cy_pdl.h"
 #include "cycfg.h"
 
-#define sSPI_HW SCB2
+#define sSPI_HW SCB3
 
 /***************************************
 *         Function Prototypes

@@ -14,7 +14,7 @@
 *         Function Prototypes
 ****************************************/
 uint32 initMaster(void);
-void sendPacket(uint8_t *txBuffer);
+void sendPacket(uint32_t *txBuffer);
 void AssignAndConfigurePins();
 uint32 checkTranferStatus(void);
 

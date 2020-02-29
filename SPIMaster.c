@@ -4,11 +4,11 @@
 
 /* Assign pins for SPI on SCB1: P10[0], P10[1], P10[2] and P10[3] */
 // !!!!!!!!!! MAPPING FROM DOCS IS ERRONEOUS! (MISO AND MOSI ARE INTERCHANGED)
-#define SPI_PORT        P10_0_PORT
-#define SPI_MOSI_NUM    P10_0_NUM
-#define SPI_MISO_NUM    P10_1_NUM
-#define SPI_SCLK_NUM    P10_2_NUM
-#define SPI_SS_NUM      P10_3_NUM
+#define SPI_PORT        P9_0_PORT
+#define SPI_MOSI_NUM    P9_0_NUM
+#define SPI_MISO_NUM    P9_1_NUM
+#define SPI_SCLK_NUM    P9_2_NUM
+#define SPI_SS_NUM      P9_3_NUM
 
 /* Assign divider type and number for SPI */
 #define SPI_CLK_DIV_TYPE    (CY_SYSCLK_DIV_8_BIT)
@@ -73,7 +73,7 @@ uint32 initMaster(void)
 	AssignAndConfigurePins();
 
 	/* Connect assigned divider to be a clock source for SPI */
-	Cy_SysClk_PeriphAssignDivider(PCLK_SCB1_CLOCK, SPI_CLK_DIV_TYPE, SPI_CLK_DIV_NUM);
+	Cy_SysClk_PeriphAssignDivider(PCLK_SCB2_CLOCK, SPI_CLK_DIV_TYPE, SPI_CLK_DIV_NUM);
 
 	/* SPI master desired data rate is 1 Mbps.
 	* The SPI master data rate = (clk_scb / Oversample).
@@ -84,7 +84,7 @@ uint32 initMaster(void)
 	Cy_SysClk_PeriphEnableDivider(SPI_CLK_DIV_TYPE, SPI_CLK_DIV_NUM);
 
 	/* Set active slave select to line 0 */
-	Cy_SCB_SPI_SetActiveSlaveSelect(mSPI_HW, CY_SCB_SPI_SLAVE_SELECT0);
+	Cy_SCB_SPI_SetActiveSlaveSelect(mSPI_HW, CY_SCB_SPI_SLAVE_SELECT1);
 
 	/* Enable SPI master block. */
 	Cy_SCB_SPI_Enable(mSPI_HW);
@@ -100,10 +100,10 @@ uint32 initMaster(void)
 void AssignAndConfigurePins()
 {
 	/* Connect SCB1 SPI function to pins */
-	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_MISO_NUM, P10_1_SCB1_SPI_MISO);
-	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_MOSI_NUM, P10_0_SCB1_SPI_MOSI);
-	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_SCLK_NUM, P10_2_SCB1_SPI_CLK);
-	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_SS_NUM,   P10_3_SCB1_SPI_SELECT0);
+	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_MISO_NUM, P9_1_SCB2_SPI_MISO);
+	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_MOSI_NUM, P9_0_SCB2_SPI_MOSI);
+	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_SCLK_NUM, P9_2_SCB2_SPI_CLK);
+	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_SS_NUM,   P9_4_SCB2_SPI_SELECT1);
 
 	/* Configure SCB1 pins for SPI Master operation */
 	Cy_GPIO_SetDrivemode(SPI_PORT, SPI_MISO_NUM, CY_GPIO_DM_HIGHZ);
@@ -124,7 +124,7 @@ void AssignAndConfigurePins()
 * Return:		None
 *
 ******************************************************************************/
-void sendPacket(uint8_t *txBuffer)
+void sendPacket(uint32_t *txBuffer)
 {
 	/* Master: start a transfer. Slave: prepare for a transfer. */
 	Cy_SCB_SPI_WriteArrayBlocking(mSPI_HW, txBuffer, sizeof(txBuffer));
