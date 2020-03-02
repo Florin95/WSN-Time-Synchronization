@@ -43,7 +43,6 @@
 #include "cybsp.h"
 #include "cybsp_wifi.h"
 #include "cy_retarget_io.h"
-#include "string.h"
 
 /* FreeRTOS header file */
 #include <FreeRTOS.h>
@@ -102,6 +101,27 @@
 #define CLIENT_TASK_Q_TICKS_TO_TIMEOUT    (100)
 #define RTOS_TASK_TICKS_TO_WAIT           (100)
 
+#define CONFIG1_START           (0X01)
+#define CONFIG2_START           (0x02)
+#define CONFIG3_START           (0x03)
+
+#define WREG                    (0x40)
+#define SDATAC                  (0x11)
+#define RDATAC                  (0x10)
+#define CONFIG1                 (0x85)
+#define CONFIG2                 (0x00)
+#define CONFIG3                 (0xC0)
+
+#define mSPI_MOSI				(P6_0)
+#define mSPI_MISO				(P6_1)
+#define mSPI_SCLK				(P6_2)
+#define mSPI_SS					(P6_3)
+
+#define ADS1298_PDWN            (P9_0)
+#define ADS1298_RST             (P9_1)
+#define ADS1298_START           (P9_2)
+#define ADS1298_DRDY            (P0_2)
+
 /* Handle of the Queue to send TCP data packets */
 QueueHandle_t tcp_client_queue;
 
@@ -116,7 +136,8 @@ typedef struct
 * Function Prototypes
 ******************************************************************************/
 void tcp_client_task(void *arg);
-
+void SPI_send(uint8_t* transfer_buf, uint8_t* receive_buf, uint32_t size);
+void ADS1298_StartUp_Procedure();
 /******************************************************************************
 * Global Variables
 ******************************************************************************/
@@ -135,10 +156,33 @@ QueueHandle_t tcpClientQ;
 /* Connection */
 struct netconn *conn;
 
+/* SPI master descriptor */
+cyhal_spi_t mSPI;
+
 /* This enables RTOS aware debugging */
 volatile int uxTopUsedPriority ;
 const size_t tcp_server_cert_len = sizeof( tcp_server_cert );
 tcp_data_packet_t tcp_pkt_buf;
+
+volatile bool DRDY_received = false;
+
+/* Interrupt handler callback function */
+void gpio_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
+{
+	DRDY_received = true;
+}
+
+void snippet_cyhal_gpio_interrupt()
+{
+    cy_rslt_t rslt;
+    /* Initialize pin ADS1298_DRDY as an input pin */
+    rslt = cyhal_gpio_init(ADS1298_DRDY, CYHAL_GPIO_DIR_INPUT, CYHAL_GPIO_DRIVE_NONE, false);
+    CY_ASSERT(CY_RSLT_SUCCESS == rslt);
+    /* Register callback function - gpio_interrupt_handler and pass the value global_count */
+    cyhal_gpio_register_callback(ADS1298_DRDY, gpio_interrupt_handler, NULL);
+    /* Enable falling edge interrupt event with interrupt priority set to 3 */
+    cyhal_gpio_enable_event(ADS1298_DRDY, CYHAL_GPIO_IRQ_FALL, 3, true);
+}
 
 /******************************************************************************
  * Function Name: main
@@ -165,6 +209,8 @@ int main()
     result = cybsp_init() ;
     CY_ASSERT(result == CY_RSLT_SUCCESS);
 
+    snippet_cyhal_gpio_interrupt();
+
     /* Enable global interrupts */
     __enable_irq();
 
@@ -178,7 +224,7 @@ int main()
     printf("CE229112 - ModusToolbox Connectivity Example: TCP Client\n");
     printf("============================================================\n\n");
 
-	// ================================
+	/* Initialize the structure that will get transferred to the server. */
 	sprintf(tcp_pkt_buf.text, " ");
 	int k = 0;
 	strcpy(tcp_pkt_buf.text, "123456 ");
@@ -189,6 +235,43 @@ int main()
 	tcp_pkt_buf.len = strlen(tcp_pkt_buf.text);
 	printf("Text size = %d\n", tcp_pkt_buf.len);
 	// ================================
+
+    /* Configure SPI Master */
+    printf(">> Configure SPI master \r\n");
+    result = cyhal_spi_init(&mSPI, mSPI_MOSI, mSPI_MISO, mSPI_SCLK, mSPI_SS, NULL, 8, CYHAL_SPI_MODE_01_MSB, false);
+    if(result != CY_SCB_SPI_SUCCESS)
+    {
+    	printf("Error!\n");
+    }
+    result = cyhal_spi_set_frequency(&mSPI, 1000000);
+    if(result != CY_SCB_SPI_SUCCESS)
+    {
+    	printf("Error!\n");
+    }
+    // ================================
+
+    // Must be called after the SPI interface is initialized.
+    ADS1298_StartUp_Procedure();
+
+    uint8_t transmit_data[27];
+    uint8_t receive_data[27];
+
+    for (int j = 0; j < 27; j++)
+    {
+    	transmit_data[j] = 0;
+    	receive_data[j] = 0;
+    }
+
+    for (;;)
+    {
+    	if (DRDY_received)
+    	{
+    		DRDY_received = false;
+    		SPI_send(transmit_data, receive_data, 27);
+    	}
+//    	/* Give delay between commands. */
+//		Cy_SysLib_Delay(10);
+    }
 
     /* Initialize timer to toggle the LED */
     timer_init();
@@ -204,6 +287,73 @@ int main()
 
     /* Should never get here */
     CY_ASSERT(0);
+}
+
+void ADS1298_StartUp_Procedure()
+{
+    // Initialize GPIO as an output with strong drive mode and initial value = false (low).
+    cyhal_gpio_init(ADS1298_PDWN, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
+    cyhal_gpio_init(ADS1298_RST, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
+    cyhal_gpio_init(ADS1298_START, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, false);
+
+    // Set ADS pins default status.
+    cyhal_gpio_write(ADS1298_PDWN, true);
+    cyhal_gpio_write(ADS1298_RST, true);
+    cyhal_gpio_write(ADS1298_START, false);
+
+    // Delay for Power-On Reset and Oscillator Start-Up.
+    Cy_SysLib_Delay(500);
+
+    // Issue Reset Pulse, wait for 18 t_clk.
+    cyhal_gpio_write(ADS1298_RST, false);
+    Cy_SysLib_Delay(20);
+    cyhal_gpio_write(ADS1298_RST, true);
+    Cy_SysLib_Delay(500);
+
+    uint8_t command[3] = {0x00 , 0x00, 0x00};
+    uint8_t recv[1]= {0};
+
+    // Send SDATAC command.
+    command[0] = SDATAC;
+    SPI_send(command, recv, 1);
+    Cy_SysLib_Delay(10);
+
+    // Set internal reference.
+    command[0] = WREG | CONFIG3_START;
+    command[2] = CONFIG3;
+    SPI_send(command, recv, 3);
+    Cy_SysLib_Delay(400);
+
+    command[0] = WREG | CONFIG1_START;
+    command[2] = CONFIG1;
+    SPI_send(command, recv, 3);
+    Cy_SysLib_Delay(10);
+
+    command[0] = WREG | CONFIG2_START;
+    command[2] = CONFIG2;
+    SPI_send(command, recv, 3);
+    Cy_SysLib_Delay(10);
+
+    // Set Start = 1
+    cyhal_gpio_write(ADS1298_START, true);
+
+    // Send RDATAC
+    command[0] = RDATAC;
+    SPI_send(command, recv, 1);
+    Cy_SysLib_Delay(10);
+}
+
+void SPI_send(uint8_t* transfer_buf, uint8_t* receive_buf, uint32_t size)
+{
+	/* Send packet with command to the slave. */
+	if (CY_RSLT_SUCCESS ==  cyhal_spi_transfer(&mSPI, transfer_buf, size, receive_buf, size, 0x00))
+	{
+    	// Transfer done!
+	}
+    else
+    {
+    	printf("Error!\n");
+    }
 }
 
 /* Close the TCP connection and free its resources */
