@@ -1,43 +1,3 @@
-/******************************************************************************
-* File Name:   main.c
-*
-* Description: This is the source code for TCP Secure Client Example in
-* ModusToolbox.
-*
-* Related Document: See Readme.md
-*
-*******************************************************************************
-* (c) 2019, Cypress Semiconductor Corporation. All rights reserved.
-*******************************************************************************
-* This software, including source code, documentation and related materials
-* ("Software"), is owned by Cypress Semiconductor Corporation or one of its
-* subsidiaries ("Cypress") and is protected by and subject to worldwide patent
-* protection (United States and foreign), United States copyright laws and
-* international treaty provisions. Therefore, you may use this Software only
-* as provided in the license agreement accompanying the software package from
-* which you obtained this Software ("EULA").
-*
-* If no EULA applies, Cypress hereby grants you a personal, non-exclusive,
-* non-transferable license to copy, modify, and compile the Software source
-* code solely for use in connection with Cypress's integrated circuit products.
-* Any reproduction, modification, translation, compilation, or representation
-* of this Software except as specified above is prohibited without the express
-* written permission of Cypress.
-*
-* Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO WARRANTY OF ANY KIND,
-* EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, NONINFRINGEMENT, IMPLIED
-* WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. Cypress
-* reserves the right to make changes to the Software without notice. Cypress
-* does not assume any liability arising out of the application or use of the
-* Software or any product or circuit described in the Software. Cypress does
-* not authorize its products for use in any products where a malfunction or
-* failure of the Cypress product may reasonably be expected to result in
-* significant property damage, injury or death ("High Risk Product"). By
-* including Cypress's product in a High Risk Product, the manufacturer of such
-* system or application assumes all risk of such use and in doing so agrees to
-* indemnify Cypress against all liability.
-*******************************************************************************/
-
 /* Header file includes */
 #include "cyhal.h"
 #include "cybsp.h"
@@ -211,17 +171,20 @@ int main()
     result = cybsp_init() ;
     CY_ASSERT(result == CY_RSLT_SUCCESS);
 
-    // Magic that makes the DMA work!
-	Cy_TrigMux_Connect(TRIG0_IN_TR_GROUP13_OUTPUT13, TRIG0_OUT_CPUSS_DW0_TR_IN2, false, TRIGGER_TYPE_LEVEL);
-	Cy_TrigMux_Connect(TRIG13_IN_SCB1_TR_TX_REQ, TRIG13_OUT_TR_GROUP0_INPUT40, false, TRIGGER_TYPE_LEVEL);
+    // Magic that makes the DMA work (both RX and TX)!
+	Cy_TrigMux_Connect(TRIG0_IN_TR_GROUP13_OUTPUT13, TRIG0_OUT_CPUSS_DW0_TR_IN3, false, TRIGGER_TYPE_LEVEL);
+	Cy_TrigMux_Connect(TRIG0_IN_TR_GROUP13_OUTPUT5, TRIG0_OUT_CPUSS_DW0_TR_IN2, false, TRIGGER_TYPE_LEVEL);
+	Cy_TrigMux_Connect(TRIG13_IN_SCB1_TR_RX_REQ, TRIG13_OUT_TR_GROUP0_INPUT40, false, TRIGGER_TYPE_LEVEL);
+	Cy_TrigMux_Connect(TRIG13_IN_SCB1_TR_TX_REQ, TRIG13_OUT_TR_GROUP0_INPUT32, false, TRIGGER_TYPE_LEVEL);
 
     initMaster();
     uint8_t transmit_data[27];
     uint8_t receive_data[27];
 
     ConfigureTxDma(transmit_data);
+    ConfigureRxDma(receive_data);
 
-    //snippet_cyhal_gpio_interrupt();
+    snippet_cyhal_gpio_interrupt();
 
     /* Enable global interrupts */
     __enable_irq();
@@ -247,14 +210,13 @@ int main()
 
     for (;;)
     {
-    	if (DRDY_received)
+    	//if (DRDY_received)
     	{
     		DRDY_received = false;
     		sendPacket();
-    		//SPI_send(transmit_data, receive_data, 27);
     	}
 //    	/* Give delay between commands. */
-		//Cy_SysLib_Delay(10);
+		Cy_SysLib_Delay(10);
     }
 
     /* Initialize timer to toggle the LED */
@@ -375,7 +337,6 @@ void tcp_client_task(void *arg)
             .u_addr.ip4.addr = TCP_SERVER_IP_ADDRESS,
             .type = IPADDR_TYPE_V4
     };
-
 
     /* Variable to track the number of connection retries to the Wi-Fi AP specified
      * by WIFI_SSID macro */

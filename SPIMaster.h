@@ -1,10 +1,3 @@
-/*
- * SPIMaster.h
- *
- *  Created on: 6 mar. 2020
- *      Author: Nastase
- */
-
 #ifndef SPIMASTER_H_
 #define SPIMASTER_H_
 
