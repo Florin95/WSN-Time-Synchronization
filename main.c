@@ -68,6 +68,7 @@
 
 #include "network_credentials.h"
 #include "timer_config.h"
+#include "SPIMaster.h"
 
 /******************************************************************************
 * Macros
@@ -209,7 +210,9 @@ int main()
     result = cybsp_init() ;
     CY_ASSERT(result == CY_RSLT_SUCCESS);
 
-    snippet_cyhal_gpio_interrupt();
+    initMaster();
+
+    //snippet_cyhal_gpio_interrupt();
 
     /* Enable global interrupts */
     __enable_irq();
@@ -224,30 +227,30 @@ int main()
     printf("CE229112 - ModusToolbox Connectivity Example: TCP Client\n");
     printf("============================================================\n\n");
 
-	/* Initialize the structure that will get transferred to the server. */
-	sprintf(tcp_pkt_buf.text, " ");
-	int k = 0;
-	strcpy(tcp_pkt_buf.text, "123456 ");
-	for (k = 0; k < 19; k++ )
-	{
-		strcat(tcp_pkt_buf.text, "123456 ");
-	}
-	tcp_pkt_buf.len = strlen(tcp_pkt_buf.text);
-	printf("Text size = %d\n", tcp_pkt_buf.len);
-	// ================================
+//	/* Initialize the structure that will get transferred to the server. */
+//	sprintf(tcp_pkt_buf.text, " ");
+//	int k = 0;
+//	strcpy(tcp_pkt_buf.text, "123456 ");
+//	for (k = 0; k < 19; k++ )
+//	{
+//		strcat(tcp_pkt_buf.text, "123456 ");
+//	}
+//	tcp_pkt_buf.len = strlen(tcp_pkt_buf.text);
+//	printf("Text size = %d\n", tcp_pkt_buf.len);
+//	// ================================
 
-    /* Configure SPI Master */
-    printf(">> Configure SPI master \r\n");
-    result = cyhal_spi_init(&mSPI, mSPI_MOSI, mSPI_MISO, mSPI_SCLK, mSPI_SS, NULL, 8, CYHAL_SPI_MODE_01_MSB, false);
-    if(result != CY_SCB_SPI_SUCCESS)
-    {
-    	printf("Error!\n");
-    }
-    result = cyhal_spi_set_frequency(&mSPI, 1000000);
-    if(result != CY_SCB_SPI_SUCCESS)
-    {
-    	printf("Error!\n");
-    }
+//    /* Configure SPI Master */
+//    printf(">> Configure SPI master \r\n");
+//    result = cyhal_spi_init(&mSPI, mSPI_MOSI, mSPI_MISO, mSPI_SCLK, mSPI_SS, NULL, 8, CYHAL_SPI_MODE_01_MSB, false);
+//    if(result != CY_SCB_SPI_SUCCESS)
+//    {
+//    	printf("Error!\n");
+//    }
+//    result = cyhal_spi_set_frequency(&mSPI, 1000000);
+//    if(result != CY_SCB_SPI_SUCCESS)
+//    {
+//    	printf("Error!\n");
+//    }
     // ================================
 
     // Must be called after the SPI interface is initialized.
@@ -264,13 +267,13 @@ int main()
 
     for (;;)
     {
-    	if (DRDY_received)
+    	//if (DRDY_received)
     	{
     		DRDY_received = false;
     		SPI_send(transmit_data, receive_data, 27);
     	}
 //    	/* Give delay between commands. */
-//		Cy_SysLib_Delay(10);
+		Cy_SysLib_Delay(10);
     }
 
     /* Initialize timer to toggle the LED */
@@ -345,15 +348,17 @@ void ADS1298_StartUp_Procedure()
 
 void SPI_send(uint8_t* transfer_buf, uint8_t* receive_buf, uint32_t size)
 {
-	/* Send packet with command to the slave. */
-	if (CY_RSLT_SUCCESS ==  cyhal_spi_transfer(&mSPI, transfer_buf, size, receive_buf, size, 0x00))
-	{
-    	// Transfer done!
-	}
-    else
-    {
-    	printf("Error!\n");
-    }
+	Cy_SCB_SPI_WriteArrayBlocking(mSPI_HW, transfer_buf, size);
+
+//	/* Send packet with command to the slave. */
+//	if (CY_RSLT_SUCCESS ==  cyhal_spi_transfer(&mSPI, transfer_buf, size, receive_buf, size, 0x00))
+//	{
+//    	// Transfer done!
+//	}
+//    else
+//    {
+//    	printf("Error!\n");
+//    }
 }
 
 /* Close the TCP connection and free its resources */
