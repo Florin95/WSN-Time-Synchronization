@@ -35,6 +35,7 @@
 * indemnify Cypress against all liability.
 *******************************************************************************/
 #include "SPIMaster.h"
+#include "SpiDma.h"
 
 /* Assign pins for SPI on SCB1: P10[0], P10[1], P10[2] and P10[3] */
 #define SPI_PORT        P10_0_PORT
@@ -149,8 +150,8 @@ uint32 initMaster(void)
 ******************************************************************************/
 void sendPacket(void)
 {
-	/* Enable DMA channel to transfer 12 bytes of data from txBuffer into mSPI TX-FIFO */
-	//Cy_DMA_Channel_Enable(txDma_HW, txDma_CHANNEL);
+	/* Enable DMA channel to transfer 27 bytes of data from txBuffer into mSPI TX-FIFO */
+	Cy_DMA_Channel_Enable(txDma_HW, txDma_CHANNEL);
 }
 
 /******************************************************************************
