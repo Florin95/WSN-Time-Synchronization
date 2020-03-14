@@ -1,6 +1,9 @@
 #include "SpiDma.h"
 #include "SPIMaster.h"
 
+/******************************************************************************
+* TX DMA
+******************************************************************************/
 cy_stc_dma_descriptor_t txDma_Descriptor_0 =
 {
 	.ctl = 0UL,
@@ -93,9 +96,9 @@ void TxDmaComplete(void)
 
  }
 
-
-//// ======================= RX DMA ===========================
-
+/******************************************************************************
+* RX DMA
+******************************************************************************/
 cy_stc_dma_descriptor_t RxDma_Descriptor_0 =
 {
 	.ctl = 0UL,
@@ -135,6 +138,9 @@ const cy_stc_dma_descriptor_config_t RxDma_Descriptor_0_config =
 	.yCount = 1,
 	.nextDescriptor = &RxDma_Descriptor_0,
 };
+
+uint8_t rx_dma_done;     /* RxDma done flag */
+uint8_t rx_dma_error;    /* RxDma error flag */
 
 void ConfigureRxDma(uint8_t* rxBuffer)
 {
@@ -176,9 +182,6 @@ void ConfigureRxDma(uint8_t* rxBuffer)
     Cy_DMA_Channel_Enable(RxDma_HW, RxDma_CHANNEL);
     Cy_DMA_Enable(RxDma_HW);
 }
-
-uint8_t rx_dma_done;    /* RxDma done flag */
-uint8_t rx_dma_error;    /* RxDma error flag */
 
 void RxDmaComplete(void)
 {

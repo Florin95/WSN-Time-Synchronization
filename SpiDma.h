@@ -15,7 +15,6 @@
 #define RxDma_IRQ cpuss_interrupts_dw0_3_IRQn
 
 /************************ Function Prototypes ********************************/
-
 uint32_t ConfigureTxDma(uint8_t* txBuffer);
 void TxDmaComplete(void);
 void ConfigureRxDma(uint8_t* rxBuffer);

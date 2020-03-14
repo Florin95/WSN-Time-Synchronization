@@ -16,16 +16,6 @@
 #include <mbedtlsinit.h>
 #include "ip4_addr.h"
 
-/* mbedTLS header files */
-#include "mbedtls_net_sockets.h"
-#include "mbedtls/debug.h"
-#include "mbedtls/ssl.h"
-#include "mbedtls/entropy.h"
-#include "mbedtls/ctr_drbg.h"
-#include "mbedtls/error.h"
-#include "mbedtls/certs.h"
-#include "mbedtls/config.h"
-
 #include "network_credentials.h"
 #include "timer_config.h"
 #include "SPIMaster.h"
@@ -34,34 +24,28 @@
 /******************************************************************************
 * Macros
 ******************************************************************************/
-#define MAX_CONNECTION_RETRIES            (10u)
+#define MAX_CONNECTION_RETRIES         (10u)
 
-#define MAKE_IPV4_ADDRESS(a, b, c, d)     ((((uint32_t) d) << 24) | \
-                                          (((uint32_t) c) << 16) | \
-                                          (((uint32_t) b) << 8) |\
-                                          ((uint32_t) a))
+#define MAKE_IPV4_ADDRESS(a, b, c, d)  ((((uint32_t) d) << 24) | \
+                                       (((uint32_t) c) << 16) | \
+                                       (((uint32_t) b) << 8) |\
+                                       ((uint32_t) a))
 
-/* Change the server IP address to match the TCP echo server address (IP address
- * of the PC)
- */
-#define TCP_SERVER_IP_ADDRESS             MAKE_IPV4_ADDRESS(192, 168, 137, 1)
+#define TCP_SERVER_IP_ADDRESS          MAKE_IPV4_ADDRESS(192, 168, 137, 1)
+#define TCP_SERVER_PORT      		   50007
+#define TCP_SERVER_HOSTNAME  		   "mytcpsecureserver"
 
-#define TCP_SERVER_PORT      50007
-#define TCP_SERVER_HOSTNAME  "mytcpsecureserver"
+#define TCP_CLIENT_TASK_STACK_SIZE     (1024*5)
+#define TCP_CLIENT_TASK_PRIORITY       (1)
+#define TCP_CLIENT_TASK_QUEUE_LEN      (10)
+#define CLIENT_TASK_Q_TICKS_TO_TIMEOUT (100)
+#define RTOS_TASK_TICKS_TO_WAIT        (100)
 
-/* 32-bit task notification value for the led_task */
-#define LED_ON                            (0x00lu)
-#define LED_OFF                           (0x01lu)
-
-#define USER_BTN1_INTR_PRIORITY           (5)
-
-#define LED_TASK_STACK_SIZE               (128)
-#define TCP_CLIENT_TASK_STACK_SIZE        (1024*5)
-#define LED_TASK_PRIORITY                 (1)
-#define TCP_CLIENT_TASK_PRIORITY          (1)
-#define TCP_CLIENT_TASK_QUEUE_LEN         (10)
-#define CLIENT_TASK_Q_TICKS_TO_TIMEOUT    (100)
-#define RTOS_TASK_TICKS_TO_WAIT           (100)
+/*ADS1298 defines*/
+#define mSPI_MOSI				(P6_0)
+#define mSPI_MISO				(P6_1)
+#define mSPI_SCLK				(P6_2)
+#define mSPI_SS					(P6_3)
 
 #define CONFIG1_START           (0X01)
 #define CONFIG2_START           (0x02)
@@ -74,19 +58,25 @@
 #define CONFIG2                 (0x00)
 #define CONFIG3                 (0xC0)
 
-#define mSPI_MOSI				(P6_0)
-#define mSPI_MISO				(P6_1)
-#define mSPI_SCLK				(P6_2)
-#define mSPI_SS					(P6_3)
-
 #define ADS1298_PDWN            (P9_0)
 #define ADS1298_RST             (P9_1)
 #define ADS1298_START           (P9_2)
 #define ADS1298_DRDY            (P0_2)
 
-/* Handle of the Queue to send TCP data packets */
-QueueHandle_t tcp_client_queue;
+#define ADS1298_BYTES_PER_FRAME (27)
+/******************************************************************************
+* Function Prototypes
+******************************************************************************/
+void tcp_client_task(void *arg);
+void SPI_send(uint8_t* transfer_buf, uint8_t* receive_buf, uint32_t size);
+void ADS1298_StartUp_Procedure();
+void setup_DRDY_interrupt();
+void DRDY_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event);
+void init_tcp_client();
 
+/******************************************************************************
+* Global Variables
+******************************************************************************/
 /* Data structure to TCP data and data length */
 typedef struct
 {
@@ -94,72 +84,23 @@ typedef struct
     uint8_t len;
 }tcp_data_packet_t;
 
-/******************************************************************************
-* Function Prototypes
-******************************************************************************/
-void tcp_client_task(void *arg);
-void SPI_send(uint8_t* transfer_buf, uint8_t* receive_buf, uint32_t size);
-void ADS1298_StartUp_Procedure();
-/******************************************************************************
-* Global Variables
-******************************************************************************/
+tcp_data_packet_t tcp_pkt_buf;
+/* Handle of the Queue to send TCP data packets */
+QueueHandle_t tcp_client_queue;
 /* The primary WIFI driver  */
 whd_interface_t iface ;
-
-/* 32-bit task notification value containing the LED state */
-uint32_t led_state = LED_OFF;
-
-/* LED task handle */
-TaskHandle_t led_task_handle;
-
-/* Handle of the Queue to send TCP data packets */
-QueueHandle_t tcpClientQ;
-
 /* Connection */
 struct netconn *conn;
-
-/* SPI master descriptor */
-cyhal_spi_t mSPI;
-
 /* This enables RTOS aware debugging */
-volatile int uxTopUsedPriority ;
+volatile int uxTopUsedPriority;
 const size_t tcp_server_cert_len = sizeof( tcp_server_cert );
-tcp_data_packet_t tcp_pkt_buf;
-
 volatile bool DRDY_received = false;
-
-/* Interrupt handler callback function */
-void gpio_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
-{
-	DRDY_received = true;
-}
-
-void snippet_cyhal_gpio_interrupt()
-{
-    cy_rslt_t rslt;
-    /* Initialize pin ADS1298_DRDY as an input pin */
-    rslt = cyhal_gpio_init(ADS1298_DRDY, CYHAL_GPIO_DIR_INPUT, CYHAL_GPIO_DRIVE_NONE, false);
-    CY_ASSERT(CY_RSLT_SUCCESS == rslt);
-    /* Register callback function - gpio_interrupt_handler and pass the value global_count */
-    cyhal_gpio_register_callback(ADS1298_DRDY, gpio_interrupt_handler, NULL);
-    /* Enable falling edge interrupt event with interrupt priority set to 3 */
-    cyhal_gpio_enable_event(ADS1298_DRDY, CYHAL_GPIO_IRQ_FALL, 3, true);
-}
+uint8_t transmit_data[ADS1298_BYTES_PER_FRAME];
+uint8_t receive_data[ADS1298_BYTES_PER_FRAME];
 
 /******************************************************************************
- * Function Name: main
- ******************************************************************************
- * Summary:
- *  System entrance point. This function sets up user tasks and then starts
- *  the RTOS scheduler.
- *
- * Parameters:
- *  void
- *
- * Return:
- *  int
- *
- ******************************************************************************/
+* Main
+******************************************************************************/
 int main()
 {
     cy_rslt_t result;
@@ -177,14 +118,15 @@ int main()
 	Cy_TrigMux_Connect(TRIG13_IN_SCB1_TR_RX_REQ, TRIG13_OUT_TR_GROUP0_INPUT40, false, TRIGGER_TYPE_LEVEL);
 	Cy_TrigMux_Connect(TRIG13_IN_SCB1_TR_TX_REQ, TRIG13_OUT_TR_GROUP0_INPUT32, false, TRIGGER_TYPE_LEVEL);
 
+	// Init SPI Master
     initMaster();
-    uint8_t transmit_data[27];
-    uint8_t receive_data[27];
 
+    // Configure Rx and Tx DMA channels
     ConfigureTxDma(transmit_data);
     ConfigureRxDma(receive_data);
 
-    snippet_cyhal_gpio_interrupt();
+    // Configure the interrupt pin for ADS1298 DRDY signal
+    setup_DRDY_interrupt();
 
     /* Enable global interrupts */
     __enable_irq();
@@ -195,31 +137,18 @@ int main()
 
     /* \x1b[2J\x1b[;H - ANSI ESC sequence to clear screen */
     printf("\x1b[2J\x1b[;H");
-    printf("============================================================\n");
-    printf("CE229112 - ModusToolbox Connectivity Example: TCP Client\n");
-    printf("============================================================\n\n");
 
     // Must be called after the SPI interface is initialized.
     ADS1298_StartUp_Procedure();
 
-    for (int j = 0; j < 27; j++)
+    // Initialize the transmission and reception buffers.
+    for (int j = 0; j < ADS1298_BYTES_PER_FRAME; j++)
     {
     	transmit_data[j] = 0;
     	receive_data[j] = 0;
     }
 
-    for (;;)
-    {
-    	//if (DRDY_received)
-    	{
-    		DRDY_received = false;
-    		sendPacket();
-    	}
-//    	/* Give delay between commands. */
-		Cy_SysLib_Delay(10);
-    }
-
-    /* Initialize timer to toggle the LED */
+    /* Initialize timer */
     timer_init();
 
     /* Queue to Receive TCP packets */
@@ -235,6 +164,10 @@ int main()
     CY_ASSERT(0);
 }
 
+/******************************************************************************
+* Functions
+******************************************************************************/
+/*Initializes the ADS1298 and sets it into RDATAC mode.*/
 void ADS1298_StartUp_Procedure()
 {
     // Initialize GPIO as an output with strong drive mode and initial value = false (low).
@@ -256,6 +189,7 @@ void ADS1298_StartUp_Procedure()
     cyhal_gpio_write(ADS1298_RST, true);
     Cy_SysLib_Delay(500);
 
+    // Declare the command and receive SPI buffers.
     uint8_t command[3] = {0x00 , 0x00, 0x00};
     uint8_t recv[1]= {0};
 
@@ -289,6 +223,27 @@ void ADS1298_StartUp_Procedure()
     Cy_SysLib_Delay(10);
 }
 
+
+/* Interrupt handler callback function */
+void DRDY_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
+{
+	DRDY_received = true;
+}
+
+/*Sets up the Data Ready interrupt pin.*/
+void setup_DRDY_interrupt()
+{
+    cy_rslt_t rslt;
+    /* Initialize pin ADS1298_DRDY as an input pin */
+    rslt = cyhal_gpio_init(ADS1298_DRDY, CYHAL_GPIO_DIR_INPUT, CYHAL_GPIO_DRIVE_NONE, false);
+    CY_ASSERT(CY_RSLT_SUCCESS == rslt);
+    /* Register callback function - gpio_interrupt_handler and pass the value global_count */
+    cyhal_gpio_register_callback(ADS1298_DRDY, DRDY_interrupt_handler, NULL);
+    /* Enable falling edge interrupt event with interrupt priority set to 3 */
+    cyhal_gpio_enable_event(ADS1298_DRDY, CYHAL_GPIO_IRQ_FALL, 3, true);
+}
+
+/*Send SPI data using the CPU.*/
 void SPI_send(uint8_t* transfer_buf, uint8_t* receive_buf, uint32_t size)
 {
 	Cy_SCB_SPI_WriteArrayBlocking(mSPI_HW, transfer_buf, size);
@@ -311,21 +266,8 @@ void close_tcp_connection()
 	}
 }
 
-/*******************************************************************************
- * Function Name: tcp_client_task
- *******************************************************************************
- * Summary:
- *  Task used to establish a connection to a remote TCP server and send
- *  LED ON/OFF state to the TCP server
- *
- * Parameters:
- *  void *args : Task parameter defined during task creation (unused)
- *
- * Return:
- *  void
- *
- *******************************************************************************/
-void tcp_client_task(void *arg)
+/*Initializes the TCP client.*/
+void init_tcp_client()
 {
     cy_rslt_t result ;
     err_t err;
@@ -414,17 +356,30 @@ void tcp_client_task(void *arg)
 		printf("netconn_connect returned error. Error code: %d\n", err);
 		CY_ASSERT(0);
 	}
+}
+
+/*******************************************************************************
+ * Task used to establish a connection to a remote TCP server and send data.
+ *******************************************************************************/
+void tcp_client_task(void *arg)
+{
+	init_tcp_client();
 
     for(;;)
     {
-    	if (timer_interrupt_flag)
+    	if (DRDY_received)
     	{
-    		timer_interrupt_flag = false;
+    		DRDY_received = false;
+    		sendPacket();
 
     		/* Send data over the TCP connection */
-    		err = netconn_write(conn, tcp_pkt_buf.text , tcp_pkt_buf.len,
+    		err_t err = netconn_write(conn, tcp_pkt_buf.text , tcp_pkt_buf.len,
     							NETCONN_NOFLAG);
+
+    		if (err != ERR_OK)
+    		{
+    			// ERROR
+    		}
     	}
     }
  }
-

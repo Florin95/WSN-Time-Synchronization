@@ -26,9 +26,9 @@ const cy_stc_scb_spi_config_t mSPI_config =
 	.enableMisoLateSample = true,
 	.enableTransferSeperation = false,
 	.ssPolarity = ((CY_SCB_SPI_ACTIVE_LOW << CY_SCB_SPI_SLAVE_SELECT0) | \
-                                         (CY_SCB_SPI_ACTIVE_LOW << CY_SCB_SPI_SLAVE_SELECT1) | \
-                                         (CY_SCB_SPI_ACTIVE_LOW << CY_SCB_SPI_SLAVE_SELECT2) | \
-                                         (CY_SCB_SPI_ACTIVE_LOW << CY_SCB_SPI_SLAVE_SELECT3)),
+                   (CY_SCB_SPI_ACTIVE_LOW << CY_SCB_SPI_SLAVE_SELECT1) | \
+                   (CY_SCB_SPI_ACTIVE_LOW << CY_SCB_SPI_SLAVE_SELECT2) | \
+                   (CY_SCB_SPI_ACTIVE_LOW << CY_SCB_SPI_SLAVE_SELECT3)),
 	.enableWakeFromSleep = false,
 	.rxFifoTriggerLevel = 54UL,
 	.rxFifoIntEnableMask = 0UL,
@@ -40,17 +40,10 @@ const cy_stc_scb_spi_config_t mSPI_config =
 extern volatile uint32_t txDmaDone;
 /* Allocate context for SPI operation */
 extern cy_stc_scb_spi_context_t spiContext;
+
 /******************************************************************************
-* Function Name: initMaster
-*******************************************************************************
-*
-* Summary: 		This function initializes the SPI Master based on the
-* 				configuration done in design.modus file.
-*
-* Parameters: 	None
-*
-* Return:		(uint32) INIT_SUCCESS or INIT_FAILURE
-*
+* This function initializes the SPI Master based on the
+* configuration done in design.modus file.
 ******************************************************************************/
 uint32 initMaster(void)
 {
@@ -99,35 +92,18 @@ uint32 initMaster(void)
 	return(INIT_SUCCESS);
 }
 
-
 /******************************************************************************
-* Function Name: sendPacket
-*******************************************************************************
-*
-* Summary: 		This function sends the data to the slave. Note that the below
-* 				function is blocking until all the bytes are transferred.
-*
-* Parameters:  	None
-*
-* Return:		None
-*
+* This function sends the data to the slave. Note that the below
+* function is blocking until all the bytes are transferred.
 ******************************************************************************/
 void sendPacket(void)
 {
-	/* Enable DMA channel to transfer 27 bytes of data from txBuffer into mSPI TX-FIFO */
+	/* Enable DMA channel to transfer data from txBuffer into mSPI TX-FIFO */
 	Cy_DMA_Channel_Enable(txDma_HW, txDma_CHANNEL);
 }
 
 /******************************************************************************
-* Function Name: checkTranferStatus
-*******************************************************************************
-*
-* Summary: 		This function checks for master transfer completion status
-*
-* Parameters:  	None
-*
-* Return:		Status of transfer completion
-*
+* This function checks for master transfer completion status.
 ******************************************************************************/
 uint32 checkTranferStatus(void)
 {
@@ -157,4 +133,3 @@ uint32 checkTranferStatus(void)
 
 	return(transferStatus);
 }
-
