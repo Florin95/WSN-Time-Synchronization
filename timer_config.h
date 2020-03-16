@@ -7,10 +7,10 @@
 *******************************************************************************/
 
 /* LED blink timer clock value in Hz  */
-#define TCP_TIMER_CLOCK_HZ          (10000)
+#define TCP_TIMER_CLOCK_HZ          (1000000)
 
 /* LED blink timer period value */
-#define TCP_TIMER_PERIOD            (1)
+#define TCP_TIMER_PERIOD            (130)
 
 
 /*******************************************************************************
@@ -24,5 +24,7 @@ extern cyhal_timer_t tcp_send_timer;
 * Function Prototypes
 *******************************************************************************/
 void timer_init(void);
+void start_timer();
+void stop_timer();
 
 #endif /* TIMER_CONFIG_H_ */

@@ -31,7 +31,7 @@
                                        (((uint32_t) b) << 8) |\
                                        ((uint32_t) a))
 
-#define TCP_SERVER_IP_ADDRESS          MAKE_IPV4_ADDRESS(192, 168, 137, 1)
+#define TCP_SERVER_IP_ADDRESS          MAKE_IPV4_ADDRESS(192, 168, 1, 8)
 #define TCP_SERVER_PORT      		   50007
 #define TCP_SERVER_HOSTNAME  		   "mytcpsecureserver"
 
@@ -42,11 +42,6 @@
 #define RTOS_TASK_TICKS_TO_WAIT        (100)
 
 /*ADS1298 defines*/
-#define mSPI_MOSI				(P6_0)
-#define mSPI_MISO				(P6_1)
-#define mSPI_SCLK				(P6_2)
-#define mSPI_SS					(P6_3)
-
 #define CONFIG1_START           (0X01)
 #define CONFIG2_START           (0x02)
 #define CONFIG3_START           (0x03)
@@ -54,7 +49,7 @@
 #define WREG                    (0x40)
 #define SDATAC                  (0x11)
 #define RDATAC                  (0x10)
-#define CONFIG1                 (0x85)
+#define CONFIG1                 (0x84)
 #define CONFIG2                 (0x00)
 #define CONFIG3                 (0xC0)
 
@@ -68,11 +63,11 @@
 * Function Prototypes
 ******************************************************************************/
 void tcp_client_task(void *arg);
-void SPI_send(uint8_t* transfer_buf, uint8_t* receive_buf, uint32_t size);
 void ADS1298_StartUp_Procedure();
 void setup_DRDY_interrupt();
 void DRDY_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event);
 void init_tcp_client();
+void ADS_task(void *arg);
 
 /******************************************************************************
 * Global Variables
@@ -93,6 +88,7 @@ whd_interface_t iface ;
 struct netconn *conn;
 /* This enables RTOS aware debugging */
 volatile int uxTopUsedPriority;
+volatile bool send_tcp_data = false;
 const size_t tcp_server_cert_len = sizeof( tcp_server_cert );
 volatile bool DRDY_received = false;
 uint8_t transmit_data[ADS1298_BYTES_PER_FRAME];
@@ -191,27 +187,26 @@ void ADS1298_StartUp_Procedure()
 
     // Declare the command and receive SPI buffers.
     uint8_t command[3] = {0x00 , 0x00, 0x00};
-    uint8_t recv[1]= {0};
 
     // Send SDATAC command.
     command[0] = SDATAC;
-    SPI_send(command, recv, 1);
+    send_command(command, 1, 1, 0);
     Cy_SysLib_Delay(10);
 
     // Set internal reference.
     command[0] = WREG | CONFIG3_START;
     command[2] = CONFIG3;
-    SPI_send(command, recv, 3);
+	send_command(command, 3, 1, 0);
     Cy_SysLib_Delay(400);
 
     command[0] = WREG | CONFIG1_START;
     command[2] = CONFIG1;
-    SPI_send(command, recv, 3);
+    send_command(command, 3, 1, 0);
     Cy_SysLib_Delay(10);
 
     command[0] = WREG | CONFIG2_START;
     command[2] = CONFIG2;
-    SPI_send(command, recv, 3);
+    send_command(command, 3, 1, 0);
     Cy_SysLib_Delay(10);
 
     // Set Start = 1
@@ -219,10 +214,9 @@ void ADS1298_StartUp_Procedure()
 
     // Send RDATAC
     command[0] = RDATAC;
-    SPI_send(command, recv, 1);
+    send_command(command, 1, 1, 0);
     Cy_SysLib_Delay(10);
 }
-
 
 /* Interrupt handler callback function */
 void DRDY_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
@@ -243,28 +237,44 @@ void setup_DRDY_interrupt()
     cyhal_gpio_enable_event(ADS1298_DRDY, CYHAL_GPIO_IRQ_FALL, 3, true);
 }
 
-/*Send SPI data using the CPU.*/
-void SPI_send(uint8_t* transfer_buf, uint8_t* receive_buf, uint32_t size)
+/*******************************************************************************
+ * Task used to establish a connection to a remote TCP server and send data.
+ *******************************************************************************/
+void tcp_client_task(void *arg)
 {
-	Cy_SCB_SPI_WriteArrayBlocking(mSPI_HW, transfer_buf, size);
-}
+	//init_tcp_client();
 
-/* Close the TCP connection and free its resources */
-void close_tcp_connection()
-{
-	/* Close the TCP connection and free its resources */
-	err_t err = netconn_delete(conn);
+    for(;;)
+    {
+    	if (timer_interrupt_flag)
+		{
+			timer_interrupt_flag = false;
+			/* Wait for at least t_SCCS and set CS HIGH */
+			Cy_SysLib_DelayUs(10);
+			cyhal_gpio_write(ADS1298_CS, true);
+			stop_timer();
+		}
 
-	if(err == ERR_OK)
-	{
-		printf("Info: Connection closed.\n");
-	}
-	else
-	{
-		printf("netconn_delete returned error. Error code: %d\n", err);
-		CY_ASSERT(0);
-	}
-}
+    	if (DRDY_received)
+    	{
+    		DRDY_received = false;
+    		start_timer();
+
+    		/* Wait for at least t_CSSC and set CS HIGH */
+    		cyhal_gpio_write(ADS1298_CS, false);
+    		sendPacket();
+
+//			/* Send data over the TCP connection */
+//			err_t err = netconn_write(conn, receive_data , 27,
+//								NETCONN_NOFLAG);
+//
+//			if (err != ERR_OK)
+//			{
+//				CY_ASSERT(0);
+//			}
+		}
+    }
+ }
 
 /*Initializes the TCP client.*/
 void init_tcp_client()
@@ -358,28 +368,20 @@ void init_tcp_client()
 	}
 }
 
-/*******************************************************************************
- * Task used to establish a connection to a remote TCP server and send data.
- *******************************************************************************/
-void tcp_client_task(void *arg)
+/* Close the TCP connection and free its resources */
+void close_tcp_connection()
 {
-	init_tcp_client();
+	/* Close the TCP connection and free its resources */
+	err_t err = netconn_delete(conn);
 
-    for(;;)
-    {
-    	if (DRDY_received)
-    	{
-    		DRDY_received = false;
-    		sendPacket();
+	if(err == ERR_OK)
+	{
+		printf("Info: Connection closed.\n");
+	}
+	else
+	{
+		printf("netconn_delete returned error. Error code: %d\n", err);
+		CY_ASSERT(0);
+	}
+}
 
-    		/* Send data over the TCP connection */
-    		err_t err = netconn_write(conn, tcp_pkt_buf.text , tcp_pkt_buf.len,
-    							NETCONN_NOFLAG);
-
-    		if (err != ERR_OK)
-    		{
-    			// ERROR
-    		}
-    	}
-    }
- }

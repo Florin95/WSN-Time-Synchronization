@@ -1,5 +1,6 @@
 #include "SpiDma.h"
 #include "SPIMaster.h"
+#include "cyhal.h"
 
 /******************************************************************************
 * TX DMA
@@ -25,7 +26,7 @@ const cy_stc_dma_channel_config_t txDma_channelConfig =
 const cy_stc_dma_descriptor_config_t txDma_Descriptor_0_config =
 {
 	.retrigger = CY_DMA_RETRIG_IM,
-	.interruptType = CY_DMA_DESCR,
+	.interruptType = CY_DMA_X_LOOP,
 	.triggerOutType = CY_DMA_1ELEMENT,
 	.channelState = CY_DMA_CHANNEL_DISABLED,
 	.triggerInType = CY_DMA_1ELEMENT,
@@ -44,7 +45,7 @@ const cy_stc_dma_descriptor_config_t txDma_Descriptor_0_config =
 	.nextDescriptor = &txDma_Descriptor_0,
 };
 
-volatile uint32_t txDmaDone=0;
+volatile uint32_t txDmaDone = 0;
 
 uint32_t ConfigureTxDma(uint8_t* txBuffer)
  {
@@ -89,11 +90,12 @@ void TxDmaComplete(void)
          (CY_DMA_INTR_CAUSE_CURR_PTR_NULL != Cy_DMA_Channel_GetStatus(txDma_HW, txDma_CHANNEL)))
      {
          /* DMA error occurred while TX operations */
+    	 CY_ASSERT(0);
      }
+
      txDmaDone=1;
      /* Clear tx DMA interrupt */
      Cy_DMA_Channel_ClearInterrupt(txDma_HW, txDma_CHANNEL);
-
  }
 
 /******************************************************************************

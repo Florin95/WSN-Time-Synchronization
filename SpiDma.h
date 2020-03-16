@@ -20,4 +20,6 @@ void TxDmaComplete(void);
 void ConfigureRxDma(uint8_t* rxBuffer);
 void RxDmaComplete(void);
 
+extern volatile uint32_t txDmaDone;
+
 #endif /* SOURCE_SPIDMA_H_ */

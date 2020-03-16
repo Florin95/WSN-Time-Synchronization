@@ -1,23 +1,13 @@
 #include "SPIMaster.h"
 #include "SpiDma.h"
-
-/* Assign pins for SPI on SCB1: P10[0], P10[1], P10[2] and P10[3] */
-#define SPI_PORT        P10_0_PORT
-#define SPI_MISO_NUM    P10_1_NUM
-#define SPI_MOSI_NUM    P10_0_NUM
-#define SPI_SCLK_NUM    P10_2_NUM
-#define SPI_SS_NUM      P10_3_NUM
-
-/* Assign divider type and number for SPI */
-#define SPI_CLK_DIV_TYPE    (CY_SYSCLK_DIV_8_BIT)
-#define SPI_CLK_DIV_NUM     (0U)
+#include "cyhal.h"
 
 const cy_stc_scb_spi_config_t mSPI_config =
 {
 	.spiMode = CY_SCB_SPI_MASTER,
 	.subMode = CY_SCB_SPI_MOTOROLA,
-	.sclkMode = CY_SCB_SPI_CPHA0_CPOL1,
-	.oversample = 16,
+	.sclkMode = CY_SCB_SPI_CPHA1_CPOL0,
+	.oversample = 10,
 	.rxDataWidth = 8UL,
 	.txDataWidth = 8UL,
 	.enableMsbFirst = true,
@@ -25,14 +15,10 @@ const cy_stc_scb_spi_config_t mSPI_config =
 	.enableFreeRunSclk = false,
 	.enableMisoLateSample = true,
 	.enableTransferSeperation = false,
-	.ssPolarity = ((CY_SCB_SPI_ACTIVE_LOW << CY_SCB_SPI_SLAVE_SELECT0) | \
-                   (CY_SCB_SPI_ACTIVE_LOW << CY_SCB_SPI_SLAVE_SELECT1) | \
-                   (CY_SCB_SPI_ACTIVE_LOW << CY_SCB_SPI_SLAVE_SELECT2) | \
-                   (CY_SCB_SPI_ACTIVE_LOW << CY_SCB_SPI_SLAVE_SELECT3)),
-	.enableWakeFromSleep = false,
-	.rxFifoTriggerLevel = 54UL,
+	.ssPolarity = CY_SCB_SPI_ACTIVE_LOW,
+	.rxFifoTriggerLevel = 27UL,
 	.rxFifoIntEnableMask = 0UL,
-	.txFifoTriggerLevel = 54UL,
+	.txFifoTriggerLevel = 27UL,
 	.txFifoIntEnableMask = 0UL,
 	.masterSlaveIntEnableMask = 0UL,
 };
@@ -57,6 +43,7 @@ uint32 initMaster(void)
 	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_MOSI_NUM, P10_0_SCB1_SPI_MOSI);
 	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_SCLK_NUM, P10_2_SCB1_SPI_CLK);
 	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_SS_NUM,   P10_3_SCB1_SPI_SELECT0);
+	cyhal_gpio_init(ADS1298_CS, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
 
     /* Configure SCB1 pins for SPI Master operation */
     Cy_GPIO_SetDrivemode(SPI_PORT, SPI_MISO_NUM, CY_GPIO_DM_HIGHZ);
@@ -132,4 +119,45 @@ uint32 checkTranferStatus(void)
 	Cy_SCB_SPI_ClearSlaveMasterStatus(mSPI_HW, masterStatus);
 
 	return(transferStatus);
+}
+
+/**
+ * Send SPI data using the CPU.
+ * @param tr_buf
+ * @param buf_size
+ * @param transmit_size
+ * @param command_delay_us
+ */
+void send_command(uint8_t* tr_buf, uint32_t buf_size, uint32_t transmit_size, uint32_t command_delay_us)
+{
+	if (buf_size % transmit_size != 0)
+	{
+		// ERROR
+		CY_ASSERT(0);
+	}
+	else
+	{
+		/* Wait for at least t_CSSC and set CS HIGH */
+		cyhal_gpio_write(ADS1298_CS, false);
+		Cy_SysLib_DelayUs(10);
+
+		/* Send multibyte command */
+		for(int i = 0; i < buf_size; i += transmit_size)
+		{
+			/* Don't put a delay before the first command word */
+			if (i != 0)
+			{
+				/* Set delay between command words */
+				Cy_SysLib_DelayUs(command_delay_us);
+			}
+
+			Cy_SCB_SPI_WriteArrayBlocking(mSPI_HW, tr_buf + i, transmit_size);
+			/* Blocking wait for transfer completion */
+			while (!Cy_SCB_SPI_IsTxComplete(mSPI_HW)) {}
+		}
+
+		/* Wait for at least t_SCCS and set CS HIGH */
+		Cy_SysLib_DelayUs(10);
+		cyhal_gpio_write(ADS1298_CS, true);
+	}
 }

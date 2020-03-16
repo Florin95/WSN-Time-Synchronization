@@ -29,10 +29,10 @@ cyhal_timer_t tcp_send_timer;
     const cyhal_timer_cfg_t led_blink_timer_cfg = \
     {
         .compare_value = 0,                 /* Timer compare value, not used */
-        .period = TCP_TIMER_PERIOD,   /* Defines the timer period */
+        .period = TCP_TIMER_PERIOD,         /* Defines the timer period */
         .direction = CYHAL_TIMER_DIR_UP,    /* Timer counts up */
         .is_compare = false,                /* Don't use compare mode */
-        .is_continuous = true,              /* Run timer indefinitely */
+        .is_continuous = true,             /* Run timer indefinitely */
         .value = 0                          /* Initial value of counter */
     };
 
@@ -61,10 +61,20 @@ cyhal_timer_t tcp_send_timer;
                                , 7, true);
 
     /* Start the timer with the configured settings */
-    cyhal_timer_start(&tcp_send_timer);
+    start_timer();
  }
 
+ void start_timer()
+ {
+	    /* Start the timer with the configured settings */
+	    cyhal_timer_start(&tcp_send_timer);
+ }
 
+ void stop_timer()
+ {
+	    /* Start the timer with the configured settings */
+	    cyhal_timer_stop(&tcp_send_timer);
+ }
 /*******************************************************************************
 * Function Name: isr_timer
 ********************************************************************************
