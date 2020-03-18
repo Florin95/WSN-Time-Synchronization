@@ -57,6 +57,11 @@
 #include "lwip/stats.h"
 #include "lwip/prot/iana.h"
 
+
+#include "lwip/priv/api_msg.h"
+
+#include "lwip/tcp.h"
+
 #include <string.h>
 
 #ifdef LWIP_HOOK_FILENAME
@@ -706,7 +711,9 @@ ip4_input(struct pbuf *p, struct netif *inp)
 #if LWIP_TCP
       case IP_PROTO_TCP:
         MIB2_STATS_INC(mib2.ipindelivers);
+        LOCK_TCPIP_CORE();
         tcp_input(p, inp);
+        UNLOCK_TCPIP_CORE();
         break;
 #endif /* LWIP_TCP */
 #if LWIP_ICMP
