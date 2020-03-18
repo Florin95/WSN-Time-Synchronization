@@ -31,7 +31,7 @@
                                        (((uint32_t) b) << 8) |\
                                        ((uint32_t) a))
 
-#define TCP_SERVER_IP_ADDRESS          MAKE_IPV4_ADDRESS(192, 168, 1, 8)
+#define TCP_SERVER_IP_ADDRESS          MAKE_IPV4_ADDRESS(192, 168, 137, 1)
 #define TCP_SERVER_PORT      		   50007
 #define TCP_SERVER_HOSTNAME  		   "mytcpsecureserver"
 
@@ -49,7 +49,7 @@
 #define WREG                    (0x40)
 #define SDATAC                  (0x11)
 #define RDATAC                  (0x10)
-#define CONFIG1                 (0x84)
+#define CONFIG1                 (0x83)
 #define CONFIG2                 (0x00)
 #define CONFIG3                 (0xC0)
 
@@ -63,11 +63,11 @@
 * Function Prototypes
 ******************************************************************************/
 void tcp_client_task(void *arg);
+void ads_task(void *arg);
 void ADS1298_StartUp_Procedure();
 void setup_DRDY_interrupt();
 void DRDY_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event);
 void init_tcp_client();
-void ADS_task(void *arg);
 
 /******************************************************************************
 * Global Variables
@@ -93,6 +93,11 @@ const size_t tcp_server_cert_len = sizeof( tcp_server_cert );
 volatile bool DRDY_received = false;
 uint8_t transmit_data[ADS1298_BYTES_PER_FRAME];
 uint8_t receive_data[ADS1298_BYTES_PER_FRAME];
+
+TaskHandle_t networkTaskHandle = NULL;
+TaskHandle_t adsTaskHandle = NULL;
+
+volatile bool ads_task_started = false;
 
 /******************************************************************************
 * Main
@@ -145,13 +150,25 @@ int main()
     }
 
     /* Initialize timer */
-    timer_init();
+    //timer_init();
 
     /* Queue to Receive TCP packets */
     tcp_client_queue = xQueueCreate(TCP_CLIENT_TASK_QUEUE_LEN, sizeof(tcp_data_packet_t));
 
-    xTaskCreate(tcp_client_task, "Network task", TCP_CLIENT_TASK_STACK_SIZE, NULL,
-                TCP_CLIENT_TASK_PRIORITY, NULL);
+    BaseType_t xReturned;
+    xReturned = xTaskCreate(tcp_client_task, "Network task", TCP_CLIENT_TASK_STACK_SIZE, NULL,
+                TCP_CLIENT_TASK_PRIORITY, &networkTaskHandle);
+    if( xReturned != pdPASS )
+    {
+        CY_ASSERT(0);
+    }
+
+    xReturned = xTaskCreate(ads_task, "ADS task", TCP_CLIENT_TASK_STACK_SIZE, NULL,
+                TCP_CLIENT_TASK_PRIORITY+1, &adsTaskHandle);
+    if( xReturned != pdPASS )
+    {
+        CY_ASSERT(0);
+    }
 
     /* Start the FreeRTOS scheduler */
     vTaskStartScheduler();
@@ -163,65 +180,19 @@ int main()
 /******************************************************************************
 * Functions
 ******************************************************************************/
-/*Initializes the ADS1298 and sets it into RDATAC mode.*/
-void ADS1298_StartUp_Procedure()
-{
-    // Initialize GPIO as an output with strong drive mode and initial value = false (low).
-    cyhal_gpio_init(ADS1298_PDWN, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
-    cyhal_gpio_init(ADS1298_RST, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
-    cyhal_gpio_init(ADS1298_START, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, false);
-
-    // Set ADS pins default status.
-    cyhal_gpio_write(ADS1298_PDWN, true);
-    cyhal_gpio_write(ADS1298_RST, true);
-    cyhal_gpio_write(ADS1298_START, false);
-
-    // Delay for Power-On Reset and Oscillator Start-Up.
-    Cy_SysLib_Delay(500);
-
-    // Issue Reset Pulse, wait for 18 t_clk.
-    cyhal_gpio_write(ADS1298_RST, false);
-    Cy_SysLib_Delay(20);
-    cyhal_gpio_write(ADS1298_RST, true);
-    Cy_SysLib_Delay(500);
-
-    // Declare the command and receive SPI buffers.
-    uint8_t command[3] = {0x00 , 0x00, 0x00};
-
-    // Send SDATAC command.
-    command[0] = SDATAC;
-    send_command(command, 1, 1, 0);
-    Cy_SysLib_Delay(10);
-
-    // Set internal reference.
-    command[0] = WREG | CONFIG3_START;
-    command[2] = CONFIG3;
-	send_command(command, 3, 1, 0);
-    Cy_SysLib_Delay(400);
-
-    command[0] = WREG | CONFIG1_START;
-    command[2] = CONFIG1;
-    send_command(command, 3, 1, 0);
-    Cy_SysLib_Delay(10);
-
-    command[0] = WREG | CONFIG2_START;
-    command[2] = CONFIG2;
-    send_command(command, 3, 1, 0);
-    Cy_SysLib_Delay(10);
-
-    // Set Start = 1
-    cyhal_gpio_write(ADS1298_START, true);
-
-    // Send RDATAC
-    command[0] = RDATAC;
-    send_command(command, 1, 1, 0);
-    Cy_SysLib_Delay(10);
-}
-
 /* Interrupt handler callback function */
 void DRDY_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
 {
-	DRDY_received = true;
+	//DRDY_received = true;
+	if (ads_task_started)
+	{
+		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		/* Notify the ads_task */
+		xTaskNotifyFromISR(adsTaskHandle, 0, eSetValueWithoutOverwrite,
+						   &xHigherPriorityTaskWoken);
+
+		portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+	}
 }
 
 /*Sets up the Data Ready interrupt pin.*/
@@ -234,45 +205,64 @@ void setup_DRDY_interrupt()
     /* Register callback function - gpio_interrupt_handler and pass the value global_count */
     cyhal_gpio_register_callback(ADS1298_DRDY, DRDY_interrupt_handler, NULL);
     /* Enable falling edge interrupt event with interrupt priority set to 3 */
-    cyhal_gpio_enable_event(ADS1298_DRDY, CYHAL_GPIO_IRQ_FALL, 3, true);
+    cyhal_gpio_enable_event(ADS1298_DRDY, CYHAL_GPIO_IRQ_FALL, 7, true);
+}
+
+
+void ads_task(void *arg)
+{
+	uint32_t led_state;
+	ads_task_started = true;
+
+    for(;;)
+    {
+//    	if (DRDY_received)
+//    	{
+//    		DRDY_received = false;4
+
+        /* Block till USER_BNT1 is pressed */
+        xTaskNotifyWait(0, 0, &led_state, portMAX_DELAY);
+
+		/* Wait for at least t_CSSC and set CS HIGH */
+		cyhal_gpio_write(ADS1298_CS, false);
+		sendPacket();
+		Cy_SysLib_DelayUs(60);
+		/* Wait for at least t_SCCS and set CS HIGH */
+		cyhal_gpio_write(ADS1298_CS, true);
+
+		/* Send a notification to networkTask, bringing it out of the Blocked
+		   state. */
+		xTaskNotifyGive( networkTaskHandle );
+//		}
+    }
 }
 
 /*******************************************************************************
  * Task used to establish a connection to a remote TCP server and send data.
  *******************************************************************************/
+uint8_t receive_data2[ADS1298_BYTES_PER_FRAME*4];
+int nr = 0;
+
 void tcp_client_task(void *arg)
 {
-	//init_tcp_client();
+	init_tcp_client();
 
     for(;;)
     {
-    	if (timer_interrupt_flag)
-		{
-			timer_interrupt_flag = false;
-			/* Wait for at least t_SCCS and set CS HIGH */
-			Cy_SysLib_DelayUs(10);
-			cyhal_gpio_write(ADS1298_CS, true);
-			stop_timer();
-		}
+    	/* Block to wait for adsTask to notify this task. */
+    	ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+    	nr++;
 
-    	if (DRDY_received)
+    	if (nr == 1)
     	{
-    		DRDY_received = false;
-    		start_timer();
+			err_t err = netconn_write(conn, receive_data2, 27, NETCONN_NOFLAG);
+			if (err != ERR_OK)
+			{
+				CY_ASSERT(0);
+			}
 
-    		/* Wait for at least t_CSSC and set CS HIGH */
-    		cyhal_gpio_write(ADS1298_CS, false);
-    		sendPacket();
-
-//			/* Send data over the TCP connection */
-//			err_t err = netconn_write(conn, receive_data , 27,
-//								NETCONN_NOFLAG);
-//
-//			if (err != ERR_OK)
-//			{
-//				CY_ASSERT(0);
-//			}
-		}
+			nr = 0;
+    	}
     }
  }
 
@@ -383,5 +373,60 @@ void close_tcp_connection()
 		printf("netconn_delete returned error. Error code: %d\n", err);
 		CY_ASSERT(0);
 	}
+}
+
+/*Initializes the ADS1298 and sets it into RDATAC mode.*/
+void ADS1298_StartUp_Procedure()
+{
+    // Initialize GPIO as an output with strong drive mode and initial value = false (low).
+    cyhal_gpio_init(ADS1298_PDWN, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
+    cyhal_gpio_init(ADS1298_RST, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
+    cyhal_gpio_init(ADS1298_START, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, false);
+
+    // Set ADS pins default status.
+    cyhal_gpio_write(ADS1298_PDWN, true);
+    cyhal_gpio_write(ADS1298_RST, true);
+    cyhal_gpio_write(ADS1298_START, false);
+
+    // Delay for Power-On Reset and Oscillator Start-Up.
+    Cy_SysLib_Delay(500);
+
+    // Issue Reset Pulse, wait for 18 t_clk.
+    cyhal_gpio_write(ADS1298_RST, false);
+    Cy_SysLib_Delay(20);
+    cyhal_gpio_write(ADS1298_RST, true);
+    Cy_SysLib_Delay(500);
+
+    // Declare the command and receive SPI buffers.
+    uint8_t command[3] = {0x00 , 0x00, 0x00};
+
+    // Send SDATAC command.
+    command[0] = SDATAC;
+    send_command(command, 1, 1, 0);
+    Cy_SysLib_Delay(10);
+
+    // Set internal reference.
+    command[0] = WREG | CONFIG3_START;
+    command[2] = CONFIG3;
+	send_command(command, 3, 1, 5);
+    Cy_SysLib_Delay(400);
+
+    command[0] = WREG | CONFIG1_START;
+    command[2] = CONFIG1;
+    send_command(command, 3, 1, 5);
+    Cy_SysLib_Delay(10);
+
+    command[0] = WREG | CONFIG2_START;
+    command[2] = CONFIG2;
+    send_command(command, 3, 1, 5);
+    Cy_SysLib_Delay(10);
+
+    // Set Start = 1
+    cyhal_gpio_write(ADS1298_START, true);
+
+    // Send RDATAC
+    command[0] = RDATAC;
+    send_command(command, 1, 1, 0);
+    Cy_SysLib_Delay(10);
 }
 
