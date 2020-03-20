@@ -59,7 +59,7 @@ uint32 initMaster(void)
     * For clk_peri = 50 MHz, select divider value 5 and get SCB clock = (50 MHz / 5) = 10 MHz.
     * Select Oversample = 10. These setting results SPI data rate = 10 MHz / 10 = 1 Mbps.
     */
-    Cy_SysClk_PeriphSetDivider   (SPI_CLK_DIV_TYPE, SPI_CLK_DIV_NUM, 4UL);
+    Cy_SysClk_PeriphSetDivider   (SPI_CLK_DIV_TYPE, SPI_CLK_DIV_NUM, 1UL);
     Cy_SysClk_PeriphEnableDivider(SPI_CLK_DIV_TYPE, SPI_CLK_DIV_NUM);
 
 	/* If the initialization fails, return failure status */
@@ -125,12 +125,12 @@ uint32 checkTranferStatus(void)
  * Send SPI data using the CPU.
  * @param tr_buf
  * @param buf_size
- * @param transmit_size
+ * @param chunk_size
  * @param command_delay_us
  */
-void send_command(uint8_t* tr_buf, uint32_t buf_size, uint32_t transmit_size, uint32_t command_delay_us)
+void send_command(uint8_t* tr_buf, uint32_t buf_size, uint32_t chunk_size, uint32_t command_delay_us)
 {
-	if (buf_size % transmit_size != 0)
+	if (buf_size % chunk_size != 0)
 	{
 		// ERROR
 		CY_ASSERT(0);
@@ -142,7 +142,7 @@ void send_command(uint8_t* tr_buf, uint32_t buf_size, uint32_t transmit_size, ui
 		Cy_SysLib_DelayUs(10);
 
 		/* Send multibyte command */
-		for(int i = 0; i < buf_size; i += transmit_size)
+		for(int i = 0; i < buf_size; i += chunk_size)
 		{
 			/* Don't put a delay before the first command word */
 			if (i != 0)
@@ -151,7 +151,7 @@ void send_command(uint8_t* tr_buf, uint32_t buf_size, uint32_t transmit_size, ui
 				Cy_SysLib_DelayUs(command_delay_us);
 			}
 
-			Cy_SCB_SPI_WriteArrayBlocking(mSPI_HW, tr_buf + i, transmit_size);
+			Cy_SCB_SPI_WriteArrayBlocking(mSPI_HW, tr_buf + i, chunk_size);
 			/* Blocking wait for transfer completion */
 			while (!Cy_SCB_SPI_IsTxComplete(mSPI_HW)) {}
 		}

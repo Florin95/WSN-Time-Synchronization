@@ -72,7 +72,7 @@ cyhal_timer_t tcp_send_timer;
 
  void stop_timer()
  {
-	    /* Start the timer with the configured settings */
+	    /* STOP the timer with the configured settings */
 	    cyhal_timer_stop(&tcp_send_timer);
  }
 /*******************************************************************************

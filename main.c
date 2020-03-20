@@ -49,7 +49,7 @@
 #define WREG                    (0x40)
 #define SDATAC                  (0x11)
 #define RDATAC                  (0x10)
-#define CONFIG1                 (0x83)
+#define CONFIG1                 (0x82)
 #define CONFIG2                 (0x00)
 #define CONFIG3                 (0xC0)
 
@@ -58,12 +58,10 @@
 #define ADS1298_START           (P9_2)
 #define ADS1298_DRDY            (P0_2)
 
-#define ADS1298_BYTES_PER_FRAME (27)
 /******************************************************************************
 * Function Prototypes
 ******************************************************************************/
 void tcp_client_task(void *arg);
-void ads_task(void *arg);
 void ADS1298_StartUp_Procedure();
 void setup_DRDY_interrupt();
 void DRDY_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event);
@@ -80,8 +78,6 @@ typedef struct
 }tcp_data_packet_t;
 
 tcp_data_packet_t tcp_pkt_buf;
-/* Handle of the Queue to send TCP data packets */
-QueueHandle_t tcp_client_queue;
 /* The primary WIFI driver  */
 whd_interface_t iface ;
 /* Connection */
@@ -92,7 +88,6 @@ volatile bool send_tcp_data = false;
 const size_t tcp_server_cert_len = sizeof( tcp_server_cert );
 volatile bool DRDY_received = false;
 uint8_t transmit_data[ADS1298_BYTES_PER_FRAME];
-uint8_t receive_data[ADS1298_BYTES_PER_FRAME];
 
 TaskHandle_t networkTaskHandle = NULL;
 TaskHandle_t adsTaskHandle = NULL;
@@ -124,7 +119,7 @@ int main()
 
     // Configure Rx and Tx DMA channels
     ConfigureTxDma(transmit_data);
-    ConfigureRxDma(receive_data);
+    ConfigureRxDma(SPI_receive_data);
 
     // Configure the interrupt pin for ADS1298 DRDY signal
     setup_DRDY_interrupt();
@@ -146,25 +141,12 @@ int main()
     for (int j = 0; j < ADS1298_BYTES_PER_FRAME; j++)
     {
     	transmit_data[j] = 0;
-    	receive_data[j] = 0;
+    	SPI_receive_data[j] = 0;
     }
-
-    /* Initialize timer */
-    //timer_init();
-
-    /* Queue to Receive TCP packets */
-    tcp_client_queue = xQueueCreate(TCP_CLIENT_TASK_QUEUE_LEN, sizeof(tcp_data_packet_t));
 
     BaseType_t xReturned;
     xReturned = xTaskCreate(tcp_client_task, "Network task", TCP_CLIENT_TASK_STACK_SIZE, NULL,
                 TCP_CLIENT_TASK_PRIORITY, &networkTaskHandle);
-    if( xReturned != pdPASS )
-    {
-        CY_ASSERT(0);
-    }
-
-    xReturned = xTaskCreate(ads_task, "ADS task", TCP_CLIENT_TASK_STACK_SIZE, NULL,
-                TCP_CLIENT_TASK_PRIORITY+1, &adsTaskHandle);
     if( xReturned != pdPASS )
     {
         CY_ASSERT(0);
@@ -183,88 +165,86 @@ int main()
 /* Interrupt handler callback function */
 void DRDY_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
 {
-	//DRDY_received = true;
-	if (ads_task_started)
-	{
-		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-		/* Notify the ads_task */
-		xTaskNotifyFromISR(adsTaskHandle, 0, eSetValueWithoutOverwrite,
-						   &xHigherPriorityTaskWoken);
-
-		portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-	}
+	/* Wait for at least t_CSSC and set CS HIGH */
+	cyhal_gpio_write(ADS1298_CS, false);
+	sendPacket();
 }
 
-/*Sets up the Data Ready interrupt pin.*/
-void setup_DRDY_interrupt()
-{
-    cy_rslt_t rslt;
-    /* Initialize pin ADS1298_DRDY as an input pin */
-    rslt = cyhal_gpio_init(ADS1298_DRDY, CYHAL_GPIO_DIR_INPUT, CYHAL_GPIO_DRIVE_NONE, false);
-    CY_ASSERT(CY_RSLT_SUCCESS == rslt);
-    /* Register callback function - gpio_interrupt_handler and pass the value global_count */
-    cyhal_gpio_register_callback(ADS1298_DRDY, DRDY_interrupt_handler, NULL);
-    /* Enable falling edge interrupt event with interrupt priority set to 3 */
-    cyhal_gpio_enable_event(ADS1298_DRDY, CYHAL_GPIO_IRQ_FALL, 7, true);
-}
+//uint8_t SPI_receive_data2[ADS1298_BYTES_PER_FRAME * ADS1298_NR_OF_SAMPLES_TO_BUFFER];
+uint8_t timestamp = 0;
+//uint8_t SPI_receive_data2 [ADS1298_BYTES_PER_FRAME * ADS1298_NR_OF_SAMPLES_TO_BUFFER];
 
-
-void ads_task(void *arg)
-{
-	uint32_t led_state;
-	ads_task_started = true;
-
-    for(;;)
-    {
-//    	if (DRDY_received)
-//    	{
-//    		DRDY_received = false;4
-
-        /* Block till USER_BNT1 is pressed */
-        xTaskNotifyWait(0, 0, &led_state, portMAX_DELAY);
-
-		/* Wait for at least t_CSSC and set CS HIGH */
-		cyhal_gpio_write(ADS1298_CS, false);
-		sendPacket();
-		Cy_SysLib_DelayUs(60);
-		/* Wait for at least t_SCCS and set CS HIGH */
-		cyhal_gpio_write(ADS1298_CS, true);
-
-		/* Send a notification to networkTask, bringing it out of the Blocked
-		   state. */
-		xTaskNotifyGive( networkTaskHandle );
-//		}
-    }
-}
-
-/*******************************************************************************
- * Task used to establish a connection to a remote TCP server and send data.
- *******************************************************************************/
-uint8_t receive_data2[ADS1298_BYTES_PER_FRAME*4];
-int nr = 0;
-
+/* Task used to establish a connection to a remote TCP server and send data.*/
 void tcp_client_task(void *arg)
 {
 	init_tcp_client();
+	int rxBuffer_WP_copy = 0;
 
-    for(;;)
-    {
-    	/* Block to wait for adsTask to notify this task. */
-    	ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
-    	nr++;
+	for(;;)
+	{
+		if (rx_dma_done)
+		{
+			__disable_irq();
+			rx_dma_done = 0;
+			__enable_irq();
 
-    	if (nr == 1)
-    	{
-			err_t err = netconn_write(conn, receive_data2, 27, NETCONN_NOFLAG);
-			if (err != ERR_OK)
+//			tcp_task_started = true;
+
+			*((SPI_receive_data + rxBuffer_WP) + 1) = (uint8_t)((rxBuffer_WP >> 8) & 0x00FF);
+			*((SPI_receive_data + rxBuffer_WP) + 2) = (uint8_t)(rxBuffer_WP & 0x00FF);
+			*((SPI_receive_data + rxBuffer_WP) + 3) = timestamp;
+			timestamp++;
+
+			rxBuffer_WP = (rxBuffer_WP + ADS1298_BYTES_PER_FRAME) % ADS1298_BUF_CAPACITY;
+			Cy_DMA_Descriptor_SetDstAddress(&RxDma_Descriptor_0, SPI_receive_data + rxBuffer_WP);
+
+
+			// Prevent race condition on rxBuffer_WP shared variable.
+			//__disable_irq();
+			rxBuffer_WP_copy = rxBuffer_WP;
+			//__enable_irq();
+
+			int numberOfBytesInCircularBuffer = ((ADS1298_BUF_CAPACITY + ((int)rxBuffer_WP_copy - rxBuffer_RP)) % ADS1298_BUF_CAPACITY);
+
+			if (numberOfBytesInCircularBuffer >= ADS1298_BYTES_PER_FRAME * 5)
 			{
-				CY_ASSERT(0);
-			}
+				if (rxBuffer_WP_copy > rxBuffer_RP)
+				{
+	//				int x1 = *(SPI_receive_data + rxBuffer_RP + 0*ADS1298_BYTES_PER_FRAME + 1);
+	//				int x2 = *(SPI_receive_data + rxBuffer_RP + 1*ADS1298_BYTES_PER_FRAME + 1);
+	//				int x3 = *(SPI_receive_data + rxBuffer_RP + 2*ADS1298_BYTES_PER_FRAME + 1);
+	//				int x4 = *(SPI_receive_data + rxBuffer_RP + 3*ADS1298_BYTES_PER_FRAME + 1);
+	//				int x5 = *(SPI_receive_data + rxBuffer_RP + 4*ADS1298_BYTES_PER_FRAME + 1);
+	//
+	//				if ((x2-x1 > 1) || (x3-x2 > 1) || (x4-x3 > 1) || (x5-x4 > 1))
+	//				{
+	//					printf("ERROR!! \n");
+	//				}
 
-			nr = 0;
-    	}
-    }
- }
+					err_t err = netconn_write(conn, SPI_receive_data + rxBuffer_RP, numberOfBytesInCircularBuffer, NETCONN_NOFLAG);
+					rxBuffer_RP = (rxBuffer_RP + numberOfBytesInCircularBuffer) % ADS1298_BUF_CAPACITY;
+
+					if (err != ERR_OK)
+					{
+						CY_ASSERT(0);
+					}
+				}
+				else
+				{
+					// Read only the samples from the top
+					int read_length = ADS1298_BUF_CAPACITY - rxBuffer_RP;
+					err_t err = netconn_write(conn, SPI_receive_data + rxBuffer_RP, read_length, NETCONN_NOFLAG);
+					rxBuffer_RP = 0; // (rxBuffer_RP + read_length) % ADS1298_BUF_CAPACITY;
+
+					if (err != ERR_OK)
+					{
+						CY_ASSERT(0);
+					}
+				}
+			}
+		}
+	}
+}
 
 /*Initializes the TCP client.*/
 void init_tcp_client()
@@ -375,6 +355,19 @@ void close_tcp_connection()
 	}
 }
 
+/*Sets up the Data Ready interrupt pin.*/
+void setup_DRDY_interrupt()
+{
+    cy_rslt_t rslt;
+    /* Initialize pin ADS1298_DRDY as an input pin */
+    rslt = cyhal_gpio_init(ADS1298_DRDY, CYHAL_GPIO_DIR_INPUT, CYHAL_GPIO_DRIVE_NONE, false);
+    CY_ASSERT(CY_RSLT_SUCCESS == rslt);
+    /* Register callback function - gpio_interrupt_handler and pass the value global_count */
+    cyhal_gpio_register_callback(ADS1298_DRDY, DRDY_interrupt_handler, NULL);
+    /* Enable falling edge interrupt event with interrupt priority set to 3 */
+    cyhal_gpio_enable_event(ADS1298_DRDY, CYHAL_GPIO_IRQ_FALL, 7, true);
+}
+
 /*Initializes the ADS1298 and sets it into RDATAC mode.*/
 void ADS1298_StartUp_Procedure()
 {
@@ -399,6 +392,14 @@ void ADS1298_StartUp_Procedure()
 
     // Declare the command and receive SPI buffers.
     uint8_t command[3] = {0x00 , 0x00, 0x00};
+
+    // Send 16 dummy bytes to have 11 + 16 = 27
+    command[0] = 0;
+    for (int k = 0; k < ADS1298_BYTES_PER_FRAME - 11; k++)
+    {
+    	send_command(command, 1, 1, 0);
+    	Cy_SysLib_DelayUs(5);
+    }
 
     // Send SDATAC command.
     command[0] = SDATAC;

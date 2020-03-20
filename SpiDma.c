@@ -94,6 +94,7 @@ void TxDmaComplete(void)
      }
 
      txDmaDone=1;
+
      /* Clear tx DMA interrupt */
      Cy_DMA_Channel_ClearInterrupt(txDma_HW, txDma_CHANNEL);
  }
@@ -110,6 +111,7 @@ cy_stc_dma_descriptor_t RxDma_Descriptor_0 =
 	.yCtl = 0UL,
 	.nextPtr = 0UL,
 };
+
 const cy_stc_dma_channel_config_t RxDma_channelConfig =
 {
 	.descriptor = &RxDma_Descriptor_0,
@@ -141,8 +143,10 @@ const cy_stc_dma_descriptor_config_t RxDma_Descriptor_0_config =
 	.nextDescriptor = &RxDma_Descriptor_0,
 };
 
-uint8_t rx_dma_done;     /* RxDma done flag */
-uint8_t rx_dma_error;    /* RxDma error flag */
+volatile uint8_t rx_dma_done;     /* RxDma done flag */
+volatile uint8_t rx_dma_error;    /* RxDma error flag */
+volatile uint16_t rxBuffer_WP = 0;
+volatile uint16_t rxBuffer_RP = 0;
 
 void ConfigureRxDma(uint8_t* rxBuffer)
 {
@@ -185,6 +189,10 @@ void ConfigureRxDma(uint8_t* rxBuffer)
     Cy_DMA_Enable(RxDma_HW);
 }
 
+//volatile uint8_t timestamp = 0;
+volatile bool tcp_task_started = false;
+uint8_t SPI_receive_data[ADS1298_BYTES_PER_FRAME * ADS1298_NR_OF_SAMPLES_TO_BUFFER];
+
 void RxDmaComplete(void)
 {
     Cy_DMA_Channel_ClearInterrupt(RxDma_HW, RxDma_CHANNEL);
@@ -192,12 +200,28 @@ void RxDmaComplete(void)
     /* Check interrupt cause to capture errors. */
     if (CY_DMA_INTR_CAUSE_COMPLETION == Cy_DMA_Channel_GetStatus(RxDma_HW, RxDma_CHANNEL))
     {
+	     /* Wait for at least t_CSSC and set CS HIGH */
+		cyhal_gpio_write(ADS1298_CS, true);
+#if 0
+		if(tcp_task_started)
+		{
+			*((SPI_receive_data + rxBuffer_WP) + 1) = (uint8_t)((rxBuffer_WP >> 8) & 0x00FF);
+			*((SPI_receive_data + rxBuffer_WP) + 2) = (uint8_t)(rxBuffer_WP & 0x00FF);
+			*((SPI_receive_data + rxBuffer_WP) + 3) = timestamp;
+			timestamp++;
+
+			rxBuffer_WP = (rxBuffer_WP + ADS1298_BYTES_PER_FRAME) % ADS1298_BUF_CAPACITY;
+			Cy_DMA_Descriptor_SetDstAddress(&RxDma_Descriptor_0, SPI_receive_data + rxBuffer_WP);
+		}
+#endif
+
 		rx_dma_done = 1;
 	}
 	else
 	{
 		/* DMA error occurred while RX operations */
 		rx_dma_error = 1;
+		CY_ASSERT(0);
 	}
 }
 
