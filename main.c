@@ -16,6 +16,8 @@
 #include <mbedtlsinit.h>
 #include "ip4_addr.h"
 
+#include <lwip/apps/sntp.h>
+
 #include "network_credentials.h"
 #include "timer_config.h"
 #include "SPIMaster.h"
@@ -31,7 +33,7 @@
                                        (((uint32_t) b) << 8) |\
                                        ((uint32_t) a))
 
-#define TCP_SERVER_IP_ADDRESS          MAKE_IPV4_ADDRESS(192, 168, 137, 1)
+#define TCP_SERVER_IP_ADDRESS          MAKE_IPV4_ADDRESS(192, 168, 1, 4)
 #define TCP_SERVER_PORT      		   50007
 #define TCP_SERVER_HOSTNAME  		   "mytcpsecureserver"
 
@@ -97,6 +99,20 @@ const size_t tcp_server_cert_len = sizeof( tcp_server_cert );
 volatile bool DRDY_received = false;
 uint8_t transmit_data[ADS1298_BYTES_PER_FRAME];
 uint8_t receive_data[ADS1298_BYTES_PER_FRAME];
+
+
+void initialize_sntp (void)
+{
+	sntp_setoperatingmode(SNTP_OPMODE_POLL);
+
+	struct ip_addr remote = {
+		.u_addr.ip4.addr = MAKE_IPV4_ADDRESS(89, 149, 54, 18),
+		.type = IPADDR_TYPE_V4
+	};
+
+	sntp_setserver(0, &remote);
+	sntp_init();
+}
 
 /******************************************************************************
 * Main
@@ -345,6 +361,12 @@ void init_tcp_client()
     }
     printf("IP Address %s assigned\n", ip4addr_ntoa(&net->ip_addr.u_addr.ip4));
 
+
+
+    initialize_sntp();
+
+
+
 	/* Create a new TCP connection */
 	conn = netconn_new(NETCONN_TCP);
 
@@ -367,19 +389,28 @@ void tcp_client_task(void *arg)
 
     for(;;)
     {
-    	if (DRDY_received)
+    	Cy_SysLib_Delay(500);
+
+    	//if (DRDY_received)
     	{
-    		DRDY_received = false;
-    		sendPacket();
+//    		volatile int sec = 0;
+//    		volatile int us = 0;
+//
+//    		SNTP_GET_SYSTEM_TIME_NTP(sec, us);
+//
+//    		printf("sec = %d, us = %d\n", sec, us);
 
-    		/* Send data over the TCP connection */
-    		err_t err = netconn_write(conn, tcp_pkt_buf.text , tcp_pkt_buf.len,
-    							NETCONN_NOFLAG);
-
-    		if (err != ERR_OK)
-    		{
-    			// ERROR
-    		}
+//    		DRDY_received = false;
+//    		sendPacket();
+//
+//    		/* Send data over the TCP connection */
+//    		err_t err = netconn_write(conn, tcp_pkt_buf.text, tcp_pkt_buf.len,
+//    							NETCONN_NOFLAG);
+//
+//    		if (err != ERR_OK)
+//    		{
+//    			// ERROR
+//    		}
     	}
     }
  }
