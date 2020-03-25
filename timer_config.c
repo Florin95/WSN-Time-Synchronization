@@ -1,5 +1,10 @@
 #include "cyhal.h"
 #include "timer_config.h"
+/* FreeRTOS header file */
+#include <FreeRTOS.h>
+#include <task.h>
+#include <queue.h>
+
 
 static void isr_timer(void *callback_arg, cyhal_timer_event_t event);
 
@@ -58,7 +63,7 @@ cyhal_timer_t tcp_send_timer;
 
     /* Set the event on which timer interrupt occurs and enable it */
     cyhal_timer_enable_event(&tcp_send_timer, CYHAL_TIMER_IRQ_TERMINAL_COUNT \
-                               , 7, true);
+                               , 5, true);
 
     /* Start the timer with the configured settings */
     start_timer();
@@ -75,6 +80,10 @@ cyhal_timer_t tcp_send_timer;
 	    /* STOP the timer with the configured settings */
 	    cyhal_timer_stop(&tcp_send_timer);
  }
+
+ extern TaskHandle_t networkTaskHandle;
+ extern volatile bool tcp_client_started;
+ uint32_t dummy = 0;
 /*******************************************************************************
 * Function Name: isr_timer
 ********************************************************************************
@@ -93,6 +102,17 @@ static void isr_timer(void *callback_arg, cyhal_timer_event_t event)
 
 	/* Set the interrupt flag and process it from the main while(1) loop */
     timer_interrupt_flag = true;
+
+//    if (tcp_client_started)
+//    {
+//		BaseType_t xHigherPriorityTaskWoken = pdTRUE;
+//
+//		/* Notify the led_task about the change in LED state */
+//		xTaskNotifyFromISR(networkTaskHandle, dummy, eSetValueWithoutOverwrite,
+//						   &xHigherPriorityTaskWoken);
+//
+//		portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+//    }
 }
 
 /* [] END OF FILE */

@@ -11,6 +11,7 @@
 
 /* lwIP header files */
 #include <lwip/tcpip.h>
+#include <lwip/udp.h>
 #include <lwip/api.h>
 #include <lwipinit.h>
 #include <mbedtlsinit.h>
@@ -35,7 +36,7 @@
 #define TCP_SERVER_PORT      		   50007
 #define TCP_SERVER_HOSTNAME  		   "mytcpsecureserver"
 
-#define TCP_CLIENT_TASK_STACK_SIZE     (1024*5)
+#define TCP_CLIENT_TASK_STACK_SIZE     (1024*7)
 #define TCP_CLIENT_TASK_PRIORITY       (1)
 #define TCP_CLIENT_TASK_QUEUE_LEN      (10)
 #define CLIENT_TASK_Q_TICKS_TO_TIMEOUT (100)
@@ -58,6 +59,8 @@
 #define ADS1298_START           (P9_2)
 #define ADS1298_DRDY            (P0_2)
 
+#define ADS1298_DEBUG           (P9_5)
+
 /******************************************************************************
 * Function Prototypes
 ******************************************************************************/
@@ -66,7 +69,6 @@ void ADS1298_StartUp_Procedure();
 void setup_DRDY_interrupt();
 void DRDY_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event);
 void init_tcp_client();
-
 /******************************************************************************
 * Global Variables
 ******************************************************************************/
@@ -88,12 +90,9 @@ volatile bool send_tcp_data = false;
 const size_t tcp_server_cert_len = sizeof( tcp_server_cert );
 volatile bool DRDY_received = false;
 uint8_t transmit_data[ADS1298_BYTES_PER_FRAME];
+uint8_t SPI_receive_data[5*ADS1298_BYTES_PER_FRAME];
 
 TaskHandle_t networkTaskHandle = NULL;
-TaskHandle_t adsTaskHandle = NULL;
-
-volatile bool ads_task_started = false;
-
 /******************************************************************************
 * Main
 ******************************************************************************/
@@ -124,6 +123,10 @@ int main()
     // Configure the interrupt pin for ADS1298 DRDY signal
     setup_DRDY_interrupt();
 
+    cyhal_gpio_init(ADS1298_DEBUG, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
+
+    //timer_init();
+
     /* Enable global interrupts */
     __enable_irq();
 
@@ -146,7 +149,7 @@ int main()
 
     BaseType_t xReturned;
     xReturned = xTaskCreate(tcp_client_task, "Network task", TCP_CLIENT_TASK_STACK_SIZE, NULL,
-                TCP_CLIENT_TASK_PRIORITY, &networkTaskHandle);
+                1, &networkTaskHandle);
     if( xReturned != pdPASS )
     {
         CY_ASSERT(0);
@@ -170,80 +173,203 @@ void DRDY_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
 	sendPacket();
 }
 
-//uint8_t SPI_receive_data2[ADS1298_BYTES_PER_FRAME * ADS1298_NR_OF_SAMPLES_TO_BUFFER];
-uint8_t timestamp = 0;
-//uint8_t SPI_receive_data2 [ADS1298_BYTES_PER_FRAME * ADS1298_NR_OF_SAMPLES_TO_BUFFER];
+uint8_t SPI_receive_data2[ADS1298_BYTES_PER_FRAME * 1];
+//uint8_t timestamp = 0;
+
+volatile bool tcp_client_started = false;
 
 /* Task used to establish a connection to a remote TCP server and send data.*/
 void tcp_client_task(void *arg)
 {
 	init_tcp_client();
-	int rxBuffer_WP_copy = 0;
 
-	for(;;)
-	{
-		if (rx_dma_done)
-		{
+	uint8_t currentActiveDescr = RX_DMA_DESCR0;
+	uint8_t lastActiveDescr = RX_DMA_DESCR0;
+	tcp_client_started = true;
+
+//    char msg[]="testingtestingtestingtesting";
+//    struct netbuf *buf;
+//    char * data;
+
+    struct pbuf *p;
+    struct udp_pcb *ptel_pcb;
+    char msg[]="testing";
+    ptel_pcb = udp_new();
+    udp_bind(ptel_pcb, IP_ADDR_ANY, 1235);
+    //udp_recv(ptel_pcb, udp_echo_recv, NULL);
+
+    udp_init();
+
+//    conn = netconn_new( NETCONN_UDP );
+//    netconn_bind(conn, IP_ADDR_ANY, 1234 ); //local port
+//    netconn_connect(conn, IP_ADDR_BROADCAST, 1235 );
+
+
+    for( ;; )
+    {
+        //Allocate packet buffer
+//         p = pbuf_alloc(PBUF_TRANSPORT,sizeof(msg),PBUF_RAM);
+//         memcpy (p->payload, msg, sizeof(msg));
+//         udp_sendto(ptel_pcb, p, IP_ADDR_BROADCAST, 1234);
+//         pbuf_free(p); //De-allocate packet buffer
+//         vTaskDelay( 200 ); //some delay!
+
+
+    	if (rx_dma_done)
+    	{
+			cyhal_gpio_write(P9_5, false);
+
+			__disable_irq();
+			currentActiveDescr = activeDescr;
+			__enable_irq();
+
+			if (lastActiveDescr < currentActiveDescr)
+			{
+//				buf = netbuf_new();
+//				data = netbuf_alloc(buf, (currentActiveDescr - lastActiveDescr) * ADS1298_BYTES_PER_FRAME);
+//				memcpy(data, SPI_receive_data + lastActiveDescr * ADS1298_BYTES_PER_FRAME, (currentActiveDescr - lastActiveDescr) * ADS1298_BYTES_PER_FRAME);
+//				netconn_send(conn, buf);
+//				netbuf_delete(buf); // De-allocate packet buffer
+
+		        //Allocate packet buffer
+		        p = pbuf_alloc(PBUF_TRANSPORT,(currentActiveDescr - lastActiveDescr) * ADS1298_BYTES_PER_FRAME,PBUF_RAM);
+		        p->payload = (void*)(SPI_receive_data + lastActiveDescr * ADS1298_BYTES_PER_FRAME);
+		        udp_sendto(ptel_pcb, p, IP_ADDR_BROADCAST, 1234);
+		        pbuf_free(p); //De-allocate packet buffer
+		        //vTaskDelay( 200 ); //some delay!
+
+				lastActiveDescr = currentActiveDescr;
+
+			}
+			else if (lastActiveDescr > currentActiveDescr)
+			{
+		        //Allocate packet buffer
+		        p = pbuf_alloc(PBUF_TRANSPORT,(RX_DMA_NUM - lastActiveDescr) * ADS1298_BYTES_PER_FRAME,PBUF_RAM);
+		        p->payload = (void*)(SPI_receive_data + lastActiveDescr * ADS1298_BYTES_PER_FRAME);
+		        udp_sendto(ptel_pcb, p, IP_ADDR_BROADCAST, 1234);
+		        pbuf_free(p); //De-allocate packet buffer
+		        //vTaskDelay( 200 ); //some delay!
+
+//				buf = netbuf_new();
+//				data = netbuf_alloc(buf, (RX_DMA_NUM - lastActiveDescr) * ADS1298_BYTES_PER_FRAME);
+//				memcpy(data, SPI_receive_data + lastActiveDescr * ADS1298_BYTES_PER_FRAME, (RX_DMA_NUM - lastActiveDescr) * ADS1298_BYTES_PER_FRAME);
+//				netconn_send(conn, buf);
+//				netbuf_delete(buf); // De-allocate packet buffer
+
+				lastActiveDescr = 0;
+
+//				buf = netbuf_new();
+//				data = netbuf_alloc(buf, currentActiveDescr * ADS1298_BYTES_PER_FRAME);
+//				memcpy(data, SPI_receive_data, currentActiveDescr * ADS1298_BYTES_PER_FRAME);
+//				netconn_send(conn, buf);
+//				netbuf_delete(buf); // De-allocate packet buffer
+			}
+
 			__disable_irq();
 			rx_dma_done = 0;
 			__enable_irq();
 
-//			tcp_task_started = true;
-
-			*((SPI_receive_data + rxBuffer_WP) + 1) = (uint8_t)((rxBuffer_WP >> 8) & 0x00FF);
-			*((SPI_receive_data + rxBuffer_WP) + 2) = (uint8_t)(rxBuffer_WP & 0x00FF);
-			*((SPI_receive_data + rxBuffer_WP) + 3) = timestamp;
-			timestamp++;
-
-			rxBuffer_WP = (rxBuffer_WP + ADS1298_BYTES_PER_FRAME) % ADS1298_BUF_CAPACITY;
-			Cy_DMA_Descriptor_SetDstAddress(&RxDma_Descriptor_0, SPI_receive_data + rxBuffer_WP);
+			cyhal_gpio_write(P9_5, true);
+    	}
+    }
 
 
-			// Prevent race condition on rxBuffer_WP shared variable.
-			//__disable_irq();
-			rxBuffer_WP_copy = rxBuffer_WP;
-			//__enable_irq();
 
-			int numberOfBytesInCircularBuffer = ((ADS1298_BUF_CAPACITY + ((int)rxBuffer_WP_copy - rxBuffer_RP)) % ADS1298_BUF_CAPACITY);
 
-			if (numberOfBytesInCircularBuffer >= ADS1298_BYTES_PER_FRAME * 5)
-			{
-				if (rxBuffer_WP_copy > rxBuffer_RP)
-				{
-	//				int x1 = *(SPI_receive_data + rxBuffer_RP + 0*ADS1298_BYTES_PER_FRAME + 1);
-	//				int x2 = *(SPI_receive_data + rxBuffer_RP + 1*ADS1298_BYTES_PER_FRAME + 1);
-	//				int x3 = *(SPI_receive_data + rxBuffer_RP + 2*ADS1298_BYTES_PER_FRAME + 1);
-	//				int x4 = *(SPI_receive_data + rxBuffer_RP + 3*ADS1298_BYTES_PER_FRAME + 1);
-	//				int x5 = *(SPI_receive_data + rxBuffer_RP + 4*ADS1298_BYTES_PER_FRAME + 1);
-	//
-	//				if ((x2-x1 > 1) || (x3-x2 > 1) || (x4-x3 > 1) || (x5-x4 > 1))
-	//				{
-	//					printf("ERROR!! \n");
-	//				}
+//    for( ;; )
+//    {
+//    	if (rx_dma_done)
+//    	{
+//			cyhal_gpio_write(P9_5, false);
+//
+//			__disable_irq();
+//			currentActiveDescr = activeDescr;
+//			__enable_irq();
+//
+//			if (lastActiveDescr < currentActiveDescr)
+//			{
+//				buf = netbuf_new();
+//				data = netbuf_alloc(buf, (currentActiveDescr - lastActiveDescr) * ADS1298_BYTES_PER_FRAME);
+//				memcpy(data, SPI_receive_data + lastActiveDescr * ADS1298_BYTES_PER_FRAME, (currentActiveDescr - lastActiveDescr) * ADS1298_BYTES_PER_FRAME);
+//				netconn_send(conn, buf);
+//				netbuf_delete(buf); // De-allocate packet buffer
+//
+//				lastActiveDescr = currentActiveDescr;
+//
+//			}
+//			else if (lastActiveDescr > currentActiveDescr)
+//			{
+//				buf = netbuf_new();
+//				data = netbuf_alloc(buf, (RX_DMA_NUM - lastActiveDescr) * ADS1298_BYTES_PER_FRAME);
+//				memcpy(data, SPI_receive_data + lastActiveDescr * ADS1298_BYTES_PER_FRAME, (RX_DMA_NUM - lastActiveDescr) * ADS1298_BYTES_PER_FRAME);
+//				netconn_send(conn, buf);
+//				netbuf_delete(buf); // De-allocate packet buffer
+//
+//				lastActiveDescr = 0;
+//
+////				buf = netbuf_new();
+////				data = netbuf_alloc(buf, currentActiveDescr * ADS1298_BYTES_PER_FRAME);
+////				memcpy(data, SPI_receive_data, currentActiveDescr * ADS1298_BYTES_PER_FRAME);
+////				netconn_send(conn, buf);
+////				netbuf_delete(buf); // De-allocate packet buffer
+//			}
+//
+//			__disable_irq();
+//			rx_dma_done = 0;
+//			__enable_irq();
+//
+//			cyhal_gpio_write(P9_5, true);
+//    	}
+//    }
 
-					err_t err = netconn_write(conn, SPI_receive_data + rxBuffer_RP, numberOfBytesInCircularBuffer, NETCONN_NOFLAG);
-					rxBuffer_RP = (rxBuffer_RP + numberOfBytesInCircularBuffer) % ADS1298_BUF_CAPACITY;
 
-					if (err != ERR_OK)
-					{
-						CY_ASSERT(0);
-					}
-				}
-				else
-				{
-					// Read only the samples from the top
-					int read_length = ADS1298_BUF_CAPACITY - rxBuffer_RP;
-					err_t err = netconn_write(conn, SPI_receive_data + rxBuffer_RP, read_length, NETCONN_NOFLAG);
-					rxBuffer_RP = 0; // (rxBuffer_RP + read_length) % ADS1298_BUF_CAPACITY;
 
-					if (err != ERR_OK)
-					{
-						CY_ASSERT(0);
-					}
-				}
-			}
-		}
-	}
+
+//	for(;;)
+//	{
+//        //xTaskNotifyWait(0, 0, &x, portMAX_DELAY);
+//
+//		if (rx_dma_done)
+//		{
+//			cyhal_gpio_write(P9_5, false);
+//
+//			__disable_irq();
+//			currentActiveDescr = activeDescr;
+//			__enable_irq();
+//
+//			if (lastActiveDescr < currentActiveDescr)
+//			{
+//				err_t err = netconn_write(conn, SPI_receive_data + lastActiveDescr * ADS1298_BYTES_PER_FRAME,
+//												(currentActiveDescr - lastActiveDescr) * ADS1298_BYTES_PER_FRAME, NETCONN_NOFLAG);
+//				if (err != ERR_OK)
+//				{
+//					CY_ASSERT(0);
+//				}
+//			}
+//			else
+//			{
+//				err_t err = netconn_write(conn, SPI_receive_data + lastActiveDescr * ADS1298_BYTES_PER_FRAME,
+//												(RX_DMA_NUM - lastActiveDescr) * ADS1298_BYTES_PER_FRAME, NETCONN_NOFLAG);
+//				if (err != ERR_OK)
+//				{
+//					CY_ASSERT(0);
+//				}
+//
+//				err = netconn_write(conn, SPI_receive_data, currentActiveDescr * ADS1298_BYTES_PER_FRAME, NETCONN_NOFLAG);
+//				if (err != ERR_OK)
+//				{
+//					CY_ASSERT(0);
+//				}
+//			}
+//
+//			__disable_irq();
+//			lastActiveDescr = currentActiveDescr;
+//			rx_dma_done = 0;
+//			__enable_irq();
+//
+//		    cyhal_gpio_write(P9_5, true);
+//		}
+//	}
 }
 
 /*Initializes the TCP client.*/
@@ -325,17 +451,21 @@ void init_tcp_client()
     }
     printf("IP Address %s assigned\n", ip4addr_ntoa(&net->ip_addr.u_addr.ip4));
 
-	/* Create a new TCP connection */
-	conn = netconn_new(NETCONN_TCP);
 
-	/* Connect to a specific remote IP address and port */
-	err = netconn_connect(conn, &remote, TCP_SERVER_PORT);
 
-	if(err != ERR_OK)
-	{
-		printf("netconn_connect returned error. Error code: %d\n", err);
-		CY_ASSERT(0);
-	}
+
+
+//	/* Create a new TCP connection */
+//	conn = netconn_new(NETCONN_TCP);
+//
+//	/* Connect to a specific remote IP address and port */
+//	err = netconn_connect(conn, &remote, TCP_SERVER_PORT);
+//
+//	if(err != ERR_OK)
+//	{
+//		printf("netconn_connect returned error. Error code: %d\n", err);
+//		CY_ASSERT(0);
+//	}
 }
 
 /* Close the TCP connection and free its resources */

@@ -10,7 +10,7 @@
 #define TCP_TIMER_CLOCK_HZ          (1000000)
 
 /* LED blink timer period value */
-#define TCP_TIMER_PERIOD            (130)
+#define TCP_TIMER_PERIOD            (500)
 
 
 /*******************************************************************************
