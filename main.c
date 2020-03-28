@@ -21,6 +21,7 @@
 #include "timer_config.h"
 #include "SPIMaster.h"
 #include "SpiDma.h"
+#include "types.h"
 
 /******************************************************************************
 * Macros
@@ -32,9 +33,8 @@
                                        (((uint32_t) b) << 8) |\
                                        ((uint32_t) a))
 
-#define TCP_SERVER_IP_ADDRESS          MAKE_IPV4_ADDRESS(192, 168, 137, 1)
+#define TCP_SERVER_IP_ADDRESS          MAKE_IPV4_ADDRESS(192, 168, 173, 1)
 #define TCP_SERVER_PORT      		   50007
-#define TCP_SERVER_HOSTNAME  		   "mytcpsecureserver"
 
 #define TCP_CLIENT_TASK_STACK_SIZE     (1024*5)
 #define TCP_CLIENT_TASK_PRIORITY       (1)
@@ -65,18 +65,19 @@
 * Function Prototypes
 ******************************************************************************/
 void tcp_client_task(void *arg);
-void ADS1298_StartUp_Procedure();
-void setup_DRDY_interrupt();
-void DRDY_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event);
+void ads1298_startup_procedure();
+void setup_drdy_interrupt();
+void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event);
 void init_tcp_client();
+
 /******************************************************************************
 * Global Variables
 ******************************************************************************/
 /* Handle of the Queue to send TCP data packets */
 volatile QueueHandle_t tcp_client_queue;
+TaskHandle_t networkTaskHandle = NULL;
 /* Packet instance */
 tcp_data_packet_t tcp_pkt_buf;
-
 /* The primary WIFI driver  */
 whd_interface_t iface ;
 /* Connection */
@@ -84,12 +85,12 @@ struct netconn *conn;
 /* This enables RTOS aware debugging */
 volatile int uxTopUsedPriority;
 volatile bool send_tcp_data = false;
-const size_t tcp_server_cert_len = sizeof( tcp_server_cert );
 volatile bool DRDY_received = false;
-uint8_t transmit_data[ADS1298_BYTES_PER_FRAME];
-uint8_t SPI_receive_data[5*ADS1298_BYTES_PER_FRAME];
+uint8_t spi_transmit_data[ADS1298_BYTES_PER_FRAME];
+uint8_t spi_receive_data[ADS1298_BYTES_PER_FRAME];
+uint8_t received_data[ADS1298_BYTES_PER_FRAME];
+volatile bool tcp_task_started = false;
 
-TaskHandle_t networkTaskHandle = NULL;
 /******************************************************************************
 * Main
 ******************************************************************************/
@@ -114,11 +115,11 @@ int main()
     initMaster();
 
     // Configure Rx and Tx DMA channels
-    ConfigureTxDma(transmit_data);
-    ConfigureRxDma(SPI_receive_data);
+    ConfigureTxDma(spi_transmit_data);
+    ConfigureRxDma(spi_receive_data);
 
     // Configure the interrupt pin for ADS1298 DRDY signal
-    setup_DRDY_interrupt();
+    setup_drdy_interrupt();
 
     cyhal_gpio_init(ADS1298_DEBUG, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
 
@@ -132,14 +133,11 @@ int main()
     /* \x1b[2J\x1b[;H - ANSI ESC sequence to clear screen */
     printf("\x1b[2J\x1b[;H");
 
-    // Must be called after the SPI interface is initialized.
-//    ADS1298_StartUp_Procedure();
-
     // Initialize the transmission and reception buffers.
     for (int j = 0; j < ADS1298_BYTES_PER_FRAME; j++)
     {
-    	transmit_data[j] = 0;
-    	SPI_receive_data[j] = 0;
+    	spi_transmit_data[j] = 0;
+    	spi_receive_data[j] = 0;
     }
 
     /* Queue to Receive TCP packets */
@@ -164,22 +162,20 @@ int main()
 * Functions
 ******************************************************************************/
 /* Interrupt handler callback function */
-void DRDY_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
+void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
 {
 	/* Wait for at least t_CSSC and set CS HIGH */
 	cyhal_gpio_write(ADS1298_CS, false);
 	sendPacket();
 }
 
-uint8_t received_data[ADS1298_BYTES_PER_FRAME];
-volatile bool tcp_task_started = false;
 /* Task used to establish a connection to a remote TCP server and send data.*/
 void tcp_client_task(void *arg)
 {
 	init_tcp_client();
 
 	__disable_irq();
-	ADS1298_StartUp_Procedure();
+	ads1298_startup_procedure();
 	__enable_irq();
 
 	tcp_task_started = true;
@@ -187,10 +183,9 @@ void tcp_client_task(void *arg)
 	for(;;)
 	{
 		xQueueReceive(tcp_client_queue, received_data, portMAX_DELAY);
-
-		cyhal_gpio_write(P9_5, false);
+		cyhal_gpio_write(ADS1298_DEBUG, false);
 		netconn_write(conn, received_data, ADS1298_BYTES_PER_FRAME, NETCONN_NOFLAG);
-		cyhal_gpio_write(P9_5, true);
+		cyhal_gpio_write(ADS1298_DEBUG, true);
 	}
 }
 
@@ -304,20 +299,20 @@ void close_tcp_connection()
 }
 
 /*Sets up the Data Ready interrupt pin.*/
-void setup_DRDY_interrupt()
+void setup_drdy_interrupt()
 {
     cy_rslt_t rslt;
     /* Initialize pin ADS1298_DRDY as an input pin */
     rslt = cyhal_gpio_init(ADS1298_DRDY, CYHAL_GPIO_DIR_INPUT, CYHAL_GPIO_DRIVE_NONE, false);
     CY_ASSERT(CY_RSLT_SUCCESS == rslt);
     /* Register callback function - gpio_interrupt_handler and pass the value global_count */
-    cyhal_gpio_register_callback(ADS1298_DRDY, DRDY_interrupt_handler, NULL);
+    cyhal_gpio_register_callback(ADS1298_DRDY, drdy_interrupt_handler, NULL);
     /* Enable falling edge interrupt event with interrupt priority set to 3 */
     cyhal_gpio_enable_event(ADS1298_DRDY, CYHAL_GPIO_IRQ_FALL, 7, true);
 }
 
 /*Initializes the ADS1298 and sets it into RDATAC mode.*/
-void ADS1298_StartUp_Procedure()
+void ads1298_startup_procedure()
 {
     // Initialize GPIO as an output with strong drive mode and initial value = false (low).
     cyhal_gpio_init(ADS1298_PDWN, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);

@@ -1,6 +1,8 @@
 #include "SpiDma.h"
 #include "SPIMaster.h"
 #include "cyhal.h"
+#include "types.h"
+
 /* FreeRTOS header file */
 #include <FreeRTOS.h>
 #include <task.h>
@@ -116,46 +118,6 @@ cy_stc_dma_descriptor_t RxDma_Descriptor_0 =
 	.nextPtr = 0UL,
 };
 
-cy_stc_dma_descriptor_t RxDma_Descriptor_1 =
-{
-	.ctl = 0UL,
-	.src = 0UL,
-	.dst = 0UL,
-	.xCtl = 0UL,
-	.yCtl = 0UL,
-	.nextPtr = 0UL,
-};
-
-cy_stc_dma_descriptor_t RxDma_Descriptor_2 =
-{
-	.ctl = 0UL,
-	.src = 0UL,
-	.dst = 0UL,
-	.xCtl = 0UL,
-	.yCtl = 0UL,
-	.nextPtr = 0UL,
-};
-
-cy_stc_dma_descriptor_t RxDma_Descriptor_3 =
-{
-	.ctl = 0UL,
-	.src = 0UL,
-	.dst = 0UL,
-	.xCtl = 0UL,
-	.yCtl = 0UL,
-	.nextPtr = 0UL,
-};
-
-cy_stc_dma_descriptor_t RxDma_Descriptor_4 =
-{
-	.ctl = 0UL,
-	.src = 0UL,
-	.dst = 0UL,
-	.xCtl = 0UL,
-	.yCtl = 0UL,
-	.nextPtr = 0UL,
-};
-
 /******************************************************************************
 * RX DMA Channel Config
 ******************************************************************************/
@@ -190,101 +152,12 @@ const cy_stc_dma_descriptor_config_t RxDma_Descriptor_0_config =
 	.srcYincrement = 0,
 	.dstYincrement = 0,
 	.yCount = 1,
-	.nextDescriptor = &RxDma_Descriptor_1,
-};
-
-const cy_stc_dma_descriptor_config_t RxDma_Descriptor_1_config =
-{
-	.retrigger = CY_DMA_RETRIG_IM,
-	.interruptType = CY_DMA_DESCR,
-	.triggerOutType = CY_DMA_1ELEMENT,
-	.channelState = CY_DMA_CHANNEL_ENABLED,
-	.triggerInType = CY_DMA_1ELEMENT,
-	.dataSize = CY_DMA_BYTE,
-	.srcTransferSize = CY_DMA_TRANSFER_SIZE_WORD,
-	.dstTransferSize = CY_DMA_TRANSFER_SIZE_DATA,
-	.descriptorType = CY_DMA_1D_TRANSFER,
-	.srcAddress = NULL,
-	.dstAddress = NULL,
-	.srcXincrement = 0,
-	.dstXincrement = 1,
-	.xCount = 27,
-	.srcYincrement = 0,
-	.dstYincrement = 0,
-	.yCount = 1,
-	.nextDescriptor = &RxDma_Descriptor_2,
-};
-
-const cy_stc_dma_descriptor_config_t RxDma_Descriptor_2_config =
-{
-	.retrigger = CY_DMA_RETRIG_IM,
-	.interruptType = CY_DMA_DESCR,
-	.triggerOutType = CY_DMA_1ELEMENT,
-	.channelState = CY_DMA_CHANNEL_ENABLED,
-	.triggerInType = CY_DMA_1ELEMENT,
-	.dataSize = CY_DMA_BYTE,
-	.srcTransferSize = CY_DMA_TRANSFER_SIZE_WORD,
-	.dstTransferSize = CY_DMA_TRANSFER_SIZE_DATA,
-	.descriptorType = CY_DMA_1D_TRANSFER,
-	.srcAddress = NULL,
-	.dstAddress = NULL,
-	.srcXincrement = 0,
-	.dstXincrement = 1,
-	.xCount = 27,
-	.srcYincrement = 0,
-	.dstYincrement = 0,
-	.yCount = 1,
-	.nextDescriptor = &RxDma_Descriptor_3,
-};
-
-const cy_stc_dma_descriptor_config_t RxDma_Descriptor_3_config =
-{
-	.retrigger = CY_DMA_RETRIG_IM,
-	.interruptType = CY_DMA_DESCR,
-	.triggerOutType = CY_DMA_1ELEMENT,
-	.channelState = CY_DMA_CHANNEL_ENABLED,
-	.triggerInType = CY_DMA_1ELEMENT,
-	.dataSize = CY_DMA_BYTE,
-	.srcTransferSize = CY_DMA_TRANSFER_SIZE_WORD,
-	.dstTransferSize = CY_DMA_TRANSFER_SIZE_DATA,
-	.descriptorType = CY_DMA_1D_TRANSFER,
-	.srcAddress = NULL,
-	.dstAddress = NULL,
-	.srcXincrement = 0,
-	.dstXincrement = 1,
-	.xCount = 27,
-	.srcYincrement = 0,
-	.dstYincrement = 0,
-	.yCount = 1,
-	.nextDescriptor = &RxDma_Descriptor_4,
-};
-
-const cy_stc_dma_descriptor_config_t RxDma_Descriptor_4_config =
-{
-	.retrigger = CY_DMA_RETRIG_IM,
-	.interruptType = CY_DMA_DESCR,
-	.triggerOutType = CY_DMA_1ELEMENT,
-	.channelState = CY_DMA_CHANNEL_ENABLED,
-	.triggerInType = CY_DMA_1ELEMENT,
-	.dataSize = CY_DMA_BYTE,
-	.srcTransferSize = CY_DMA_TRANSFER_SIZE_WORD,
-	.dstTransferSize = CY_DMA_TRANSFER_SIZE_DATA,
-	.descriptorType = CY_DMA_1D_TRANSFER,
-	.srcAddress = NULL,
-	.dstAddress = NULL,
-	.srcXincrement = 0,
-	.dstXincrement = 1,
-	.xCount = 27,
-	.srcYincrement = 0,
-	.dstYincrement = 0,
-	.yCount = 1,
 	.nextDescriptor = &RxDma_Descriptor_0,
 };
 
 volatile uint8_t rx_dma_done;     /* RxDma done flag */
 volatile uint8_t rx_dma_error;    /* RxDma error flag */
-volatile uint8_t activeDescr = RX_DMA_DESCR0;
-volatile uint8_t* recvBuf;
+uint8_t *volatile recvBuf;
 
 void ConfigureRxDma(uint8_t* rxBuffer)
 {
@@ -304,34 +177,6 @@ void ConfigureRxDma(uint8_t* rxBuffer)
         CY_ASSERT(0);
     }
 
-    /* Initialize descriptor 2 */
-    dma_init_status = Cy_DMA_Descriptor_Init(&RxDma_Descriptor_1, &RxDma_Descriptor_1_config);
-	if(dma_init_status!=CY_DMA_SUCCESS)
-    {
-        CY_ASSERT(0);
-    }
-
-    /* Initialize descriptor 3 */
-    dma_init_status = Cy_DMA_Descriptor_Init(&RxDma_Descriptor_2, &RxDma_Descriptor_2_config);
-	if(dma_init_status!=CY_DMA_SUCCESS)
-    {
-        CY_ASSERT(0);
-    }
-
-    /* Initialize descriptor 4 */
-    dma_init_status = Cy_DMA_Descriptor_Init(&RxDma_Descriptor_3, &RxDma_Descriptor_3_config);
-	if(dma_init_status!=CY_DMA_SUCCESS)
-    {
-        CY_ASSERT(0);
-    }
-
-    /* Initialize descriptor 5 */
-    dma_init_status = Cy_DMA_Descriptor_Init(&RxDma_Descriptor_4, &RxDma_Descriptor_4_config);
-	if(dma_init_status!=CY_DMA_SUCCESS)
-    {
-        CY_ASSERT(0);
-    }
-
     dma_init_status = Cy_DMA_Channel_Init(RxDma_HW, RxDma_CHANNEL, &RxDma_channelConfig);
 	if(dma_init_status!=CY_DMA_SUCCESS)
     {
@@ -340,24 +185,7 @@ void ConfigureRxDma(uint8_t* rxBuffer)
 
     /* Set source and destination address for descriptor 1 */
     Cy_DMA_Descriptor_SetSrcAddress(&RxDma_Descriptor_0, (void *) &mSPI_HW->RX_FIFO_RD);
-    Cy_DMA_Descriptor_SetDstAddress(&RxDma_Descriptor_0, ((uint8_t *) rxBuffer) + 0*ADS1298_BYTES_PER_FRAME);
-
-    /* Set source and destination address for descriptor 2 */
-	Cy_DMA_Descriptor_SetSrcAddress(&RxDma_Descriptor_1, (void *) &mSPI_HW->RX_FIFO_RD);
-	Cy_DMA_Descriptor_SetDstAddress(&RxDma_Descriptor_1, ((uint8_t *) rxBuffer) + 1*ADS1298_BYTES_PER_FRAME);
-
-    /* Set source and destination address for descriptor 3 */
-	Cy_DMA_Descriptor_SetSrcAddress(&RxDma_Descriptor_2, (void *) &mSPI_HW->RX_FIFO_RD);
-	Cy_DMA_Descriptor_SetDstAddress(&RxDma_Descriptor_2, ((uint8_t *) rxBuffer) + 2*ADS1298_BYTES_PER_FRAME);
-
-    /* Set source and destination address for descriptor 4 */
-	Cy_DMA_Descriptor_SetSrcAddress(&RxDma_Descriptor_3, (void *) &mSPI_HW->RX_FIFO_RD);
-	Cy_DMA_Descriptor_SetDstAddress(&RxDma_Descriptor_3, ((uint8_t *) rxBuffer) + 3*ADS1298_BYTES_PER_FRAME);
-
-    /* Set source and destination address for descriptor 5 */
-	Cy_DMA_Descriptor_SetSrcAddress(&RxDma_Descriptor_4, (void *) &mSPI_HW->RX_FIFO_RD);
-	Cy_DMA_Descriptor_SetDstAddress(&RxDma_Descriptor_4, ((uint8_t *) rxBuffer) + 4*ADS1298_BYTES_PER_FRAME);
-
+    Cy_DMA_Descriptor_SetDstAddress(&RxDma_Descriptor_0, (uint8_t *) rxBuffer);
 
     Cy_DMA_Channel_SetDescriptor(RxDma_HW, RxDma_CHANNEL, &RxDma_Descriptor_0);
 
@@ -378,10 +206,9 @@ volatile tcp_data_packet_t packet;
 
 void RxDmaComplete(void)
 {
-//	cyhal_gpio_write(P9_5, false);
     Cy_DMA_Channel_ClearInterrupt(RxDma_HW, RxDma_CHANNEL);
 
-    recvBuf[activeDescr*ADS1298_BYTES_PER_FRAME + 1] = timestamp;
+    recvBuf[1] = timestamp;
 	timestamp++;
 
 	BaseType_t xHigherPriorityTaskWoken;
@@ -391,11 +218,8 @@ void RxDmaComplete(void)
 	if (tcp_task_started)
 	{
 		/* Send TCP data packet to the tcp_client_task */
-		xQueueSendToBackFromISR(tcp_client_queue, &recvBuf[activeDescr*ADS1298_BYTES_PER_FRAME], &xHigherPriorityTaskWoken);
+		xQueueSendToBackFromISR(tcp_client_queue, recvBuf, &xHigherPriorityTaskWoken);
 	}
-
-    // Set the current active descriptor.
-    activeDescr = (activeDescr + 1) % RX_DMA_NUM;
 
     /* Check interrupt cause to capture errors. */
     if (CY_DMA_INTR_CAUSE_COMPLETION == Cy_DMA_Channel_GetStatus(RxDma_HW, RxDma_CHANNEL))
@@ -412,7 +236,5 @@ void RxDmaComplete(void)
 	}
 
     portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-
-//    cyhal_gpio_write(P9_5, true);
 }
 
