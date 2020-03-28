@@ -374,13 +374,25 @@ void ConfigureRxDma(uint8_t* rxBuffer)
 }
 
 volatile uint8_t timestamp = 0;
+volatile tcp_data_packet_t packet;
 
 void RxDmaComplete(void)
 {
+//	cyhal_gpio_write(P9_5, false);
     Cy_DMA_Channel_ClearInterrupt(RxDma_HW, RxDma_CHANNEL);
 
     recvBuf[activeDescr*ADS1298_BYTES_PER_FRAME + 1] = timestamp;
 	timestamp++;
+
+	BaseType_t xHigherPriorityTaskWoken;
+	/* We have not woken a task at the start of the ISR. */
+	xHigherPriorityTaskWoken = pdFALSE;
+
+	if (tcp_task_started)
+	{
+		/* Send TCP data packet to the tcp_client_task */
+		xQueueSendToBackFromISR(tcp_client_queue, &recvBuf[activeDescr*ADS1298_BYTES_PER_FRAME], &xHigherPriorityTaskWoken);
+	}
 
     // Set the current active descriptor.
     activeDescr = (activeDescr + 1) % RX_DMA_NUM;
@@ -398,5 +410,9 @@ void RxDmaComplete(void)
 		rx_dma_error = 1;
 		CY_ASSERT(0);
 	}
+
+    portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+
+//    cyhal_gpio_write(P9_5, true);
 }
 
