@@ -38,7 +38,7 @@
 
 #define TCP_CLIENT_TASK_STACK_SIZE     (1024*5)
 #define TCP_CLIENT_TASK_PRIORITY       (1)
-#define TCP_CLIENT_TASK_QUEUE_LEN      (400)
+#define TCP_CLIENT_TASK_QUEUE_LEN      (500)
 #define CLIENT_TASK_Q_TICKS_TO_TIMEOUT (100)
 #define RTOS_TASK_TICKS_TO_WAIT        (100)
 
@@ -116,7 +116,7 @@ int main()
 
     // Configure Rx and Tx DMA channels
     ConfigureTxDma(spi_transmit_data);
-    ConfigureRxDma(spi_receive_data);
+    ConfigureRxDma();
 
     // Configure the interrupt pin for ADS1298 DRDY signal
     setup_drdy_interrupt();
@@ -141,7 +141,7 @@ int main()
     }
 
     /* Queue to Receive TCP packets */
-    tcp_client_queue = xQueueCreate(TCP_CLIENT_TASK_QUEUE_LEN, ADS1298_BYTES_PER_FRAME);
+    tcp_client_queue = xQueueCreate(TCP_CLIENT_TASK_QUEUE_LEN, sizeof(tcp_data_packet_t));
 
     BaseType_t xReturned;
     xReturned = xTaskCreate(tcp_client_task, "Network task", TCP_CLIENT_TASK_STACK_SIZE, NULL,
@@ -182,9 +182,10 @@ void tcp_client_task(void *arg)
 
 	for(;;)
 	{
-		xQueueReceive(tcp_client_queue, received_data, portMAX_DELAY);
+		xQueueReceive(tcp_client_queue, &tcp_pkt_buf, portMAX_DELAY);
+
 		cyhal_gpio_write(ADS1298_DEBUG, false);
-		netconn_write(conn, received_data, ADS1298_BYTES_PER_FRAME, NETCONN_NOFLAG);
+		netconn_write(conn, &tcp_pkt_buf, sizeof(tcp_data_packet_t), NETCONN_NOFLAG);
 		cyhal_gpio_write(ADS1298_DEBUG, true);
 	}
 }

@@ -24,7 +24,7 @@
 /************************ Function Prototypes ********************************/
 uint32_t ConfigureTxDma(uint8_t* txBuffer);
 void TxDmaComplete(void);
-void ConfigureRxDma(uint8_t* rxBuffer);
+void ConfigureRxDma(void);
 void RxDmaComplete(void);
 
 extern volatile uint32_t txDmaDone;

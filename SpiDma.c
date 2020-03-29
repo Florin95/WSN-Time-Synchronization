@@ -157,13 +157,14 @@ const cy_stc_dma_descriptor_config_t RxDma_Descriptor_0_config =
 
 volatile uint8_t rx_dma_done;     /* RxDma done flag */
 volatile uint8_t rx_dma_error;    /* RxDma error flag */
-uint8_t *volatile recvBuf;
+volatile tcp_data_packet_t tcp_packet;
 
-void ConfigureRxDma(uint8_t* rxBuffer)
+void ConfigureRxDma()
 {
-	cy_en_dma_status_t dma_init_status;
-	recvBuf = rxBuffer;
+	tcp_packet.timestamp = 0;
+	tcp_packet.sync = 0xBB;
 
+	cy_en_dma_status_t dma_init_status;
     cy_stc_sysint_t intConfig =
     {
     	.intrSrc      = (IRQn_Type)RxDma_IRQ,
@@ -172,20 +173,20 @@ void ConfigureRxDma(uint8_t* rxBuffer)
 
     /* Initialize descriptor 1 */
     dma_init_status = Cy_DMA_Descriptor_Init(&RxDma_Descriptor_0, &RxDma_Descriptor_0_config);
-	if(dma_init_status!=CY_DMA_SUCCESS)
+	if(dma_init_status != CY_DMA_SUCCESS)
     {
         CY_ASSERT(0);
     }
 
     dma_init_status = Cy_DMA_Channel_Init(RxDma_HW, RxDma_CHANNEL, &RxDma_channelConfig);
-	if(dma_init_status!=CY_DMA_SUCCESS)
+	if(dma_init_status != CY_DMA_SUCCESS)
     {
         // ERROR
     }
 
     /* Set source and destination address for descriptor 1 */
     Cy_DMA_Descriptor_SetSrcAddress(&RxDma_Descriptor_0, (void *) &mSPI_HW->RX_FIFO_RD);
-    Cy_DMA_Descriptor_SetDstAddress(&RxDma_Descriptor_0, (uint8_t *) rxBuffer);
+    Cy_DMA_Descriptor_SetDstAddress(&RxDma_Descriptor_0, (uint8_t *) tcp_packet.data);
 
     Cy_DMA_Channel_SetDescriptor(RxDma_HW, RxDma_CHANNEL, &RxDma_Descriptor_0);
 
@@ -201,28 +202,24 @@ void ConfigureRxDma(uint8_t* rxBuffer)
     Cy_DMA_Enable(RxDma_HW);
 }
 
-volatile uint8_t timestamp = 0;
-volatile tcp_data_packet_t packet;
-
 void RxDmaComplete(void)
 {
     Cy_DMA_Channel_ClearInterrupt(RxDma_HW, RxDma_CHANNEL);
-
-    recvBuf[1] = timestamp;
-	timestamp++;
 
 	BaseType_t xHigherPriorityTaskWoken;
 	/* We have not woken a task at the start of the ISR. */
 	xHigherPriorityTaskWoken = pdFALSE;
 
-	if (tcp_task_started)
+	if(tcp_task_started)
 	{
 		/* Send TCP data packet to the tcp_client_task */
-		xQueueSendToBackFromISR(tcp_client_queue, recvBuf, &xHigherPriorityTaskWoken);
+		xQueueSendToBackFromISR(tcp_client_queue, &tcp_packet, &xHigherPriorityTaskWoken);
 	}
 
+	tcp_packet.timestamp++;
+
     /* Check interrupt cause to capture errors. */
-    if (CY_DMA_INTR_CAUSE_COMPLETION == Cy_DMA_Channel_GetStatus(RxDma_HW, RxDma_CHANNEL))
+    if(CY_DMA_INTR_CAUSE_COMPLETION == Cy_DMA_Channel_GetStatus(RxDma_HW, RxDma_CHANNEL))
     {
 	    /* Wait for at least t_CSSC and set CS HIGH */
 		cyhal_gpio_write(ADS1298_CS, true);
@@ -235,6 +232,6 @@ void RxDmaComplete(void)
 		CY_ASSERT(0);
 	}
 
-    portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
