@@ -50,7 +50,7 @@
 #define WREG                    (0x40)
 #define SDATAC                  (0x11)
 #define RDATAC                  (0x10)
-#define CONFIG1                 (0x82)
+#define CONFIG1                 (0x83)
 #define CONFIG2                 (0x00)
 #define CONFIG3                 (0xC0)
 
