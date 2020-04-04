@@ -9,6 +9,8 @@
 #include <task.h>
 #include <queue.h>
 
+#include <lwip/apps/sntp.h>
+
 /* lwIP header files */
 #include <lwip/tcpip.h>
 #include <lwip/udp.h>
@@ -69,6 +71,7 @@ void ads1298_startup_procedure();
 void setup_drdy_interrupt();
 void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event);
 void init_tcp_client();
+void initialize_sntp(void);
 
 /******************************************************************************
 * Global Variables
@@ -190,6 +193,19 @@ void tcp_client_task(void *arg)
 	}
 }
 
+void initialize_sntp(void)
+{
+	sntp_setoperatingmode(SNTP_OPMODE_POLL);
+
+	struct ip_addr remote = {
+		.u_addr.ip4.addr = MAKE_IPV4_ADDRESS(89, 149, 54, 18),
+		.type = IPADDR_TYPE_V4
+	};
+
+	sntp_setserver(0, &remote);
+	sntp_init();
+}
+
 /*Initializes the TCP client.*/
 void init_tcp_client()
 {
@@ -268,6 +284,9 @@ void init_tcp_client()
         vTaskDelay(RTOS_TASK_TICKS_TO_WAIT);
     }
     printf("IP Address %s assigned\n", ip4addr_ntoa(&net->ip_addr.u_addr.ip4));
+
+    /*Initialize the SNTP connection.*/
+    initialize_sntp();
 
 	/* Create a new TCP connection */
 	conn = netconn_new(NETCONN_TCP);
