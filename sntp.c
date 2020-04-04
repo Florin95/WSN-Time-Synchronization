@@ -279,6 +279,9 @@ sntp_format_time(s32_t sec)
 }
 #endif /* LWIP_DEBUG && !sntp_format_time */
 
+int32_t second = 0;
+int32_t fraction = 0;
+uint8_t sync_received = 0;
 /**
  * SNTP processing of received timestamp
  */
@@ -328,8 +331,9 @@ sntp_process(const struct sntp_timestamps *timestamps)
   LWIP_DEBUGF(SNTP_DEBUG_TRACE, ("sntp_process: %s, %" U32_F " us\n",
                                  sntp_format_time(sec), SNTP_FRAC_TO_US(frac)));
 
-  (sec) = (s32_t)(sec - DIFF_SEC_1970_2036); \
-  printf("sec = %ld, us = %lu\n", sec, SNTP_FRAC_TO_US(frac));
+  second = (s32_t)(sec - DIFF_SEC_1970_2036); \
+  fraction = SNTP_FRAC_TO_US(frac);
+  sync_received = 1;
 }
 
 /**

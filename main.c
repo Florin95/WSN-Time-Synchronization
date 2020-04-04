@@ -187,6 +187,12 @@ void tcp_client_task(void *arg)
 	{
 		xQueueReceive(tcp_client_queue, &tcp_pkt_buf, portMAX_DELAY);
 
+		if (sync_received)
+		{
+			printf("tcp_client_task: second = %lu, frac = %lu\n", second, fraction);
+			sync_received = 0;
+		}
+
 		cyhal_gpio_write(ADS1298_DEBUG, false);
 		netconn_write(conn, &tcp_pkt_buf, sizeof(tcp_data_packet_t), NETCONN_NOFLAG);
 		cyhal_gpio_write(ADS1298_DEBUG, true);
