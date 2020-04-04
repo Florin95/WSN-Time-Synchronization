@@ -35,7 +35,7 @@
                                        (((uint32_t) b) << 8) |\
                                        ((uint32_t) a))
 
-#define TCP_SERVER_IP_ADDRESS          MAKE_IPV4_ADDRESS(192, 168, 173, 1)
+#define TCP_SERVER_IP_ADDRESS          MAKE_IPV4_ADDRESS(192, 168, 1, 6)
 #define TCP_SERVER_PORT      		   50007
 
 #define TCP_CLIENT_TASK_STACK_SIZE     (1024*5)
@@ -198,7 +198,8 @@ void initialize_sntp(void)
 	sntp_setoperatingmode(SNTP_OPMODE_POLL);
 
 	struct ip_addr remote = {
-		.u_addr.ip4.addr = MAKE_IPV4_ADDRESS(89, 149, 54, 18),
+		//.u_addr.ip4.addr = MAKE_IPV4_ADDRESS(89, 149, 54, 18),
+		.u_addr.ip4.addr = MAKE_IPV4_ADDRESS(92, 86, 106, 228),
 		.type = IPADDR_TYPE_V4
 	};
 
