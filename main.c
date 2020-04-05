@@ -28,6 +28,8 @@
 /******************************************************************************
 * Macros
 ******************************************************************************/
+#define DEVICE_ID                      (0)
+
 #define MAX_CONNECTION_RETRIES         (10u)
 
 #define MAKE_IPV4_ADDRESS(a, b, c, d)  ((((uint32_t) d) << 24) | \
@@ -45,6 +47,8 @@
 #define RTOS_TASK_TICKS_TO_WAIT        (100)
 
 /*ADS1298 defines*/
+#define ADC_SAMPLING_PERIOD_US  (500)
+
 #define CONFIG1_START           (0X01)
 #define CONFIG2_START           (0x02)
 #define CONFIG3_START           (0x03)
@@ -52,7 +56,7 @@
 #define WREG                    (0x40)
 #define SDATAC                  (0x11)
 #define RDATAC                  (0x10)
-#define CONFIG1                 (0x83)
+#define CONFIG1                 (0x84)
 #define CONFIG2                 (0x00)
 #define CONFIG3                 (0xC0)
 
@@ -93,6 +97,9 @@ uint8_t spi_transmit_data[ADS1298_BYTES_PER_FRAME];
 uint8_t spi_receive_data[ADS1298_BYTES_PER_FRAME];
 uint8_t received_data[ADS1298_BYTES_PER_FRAME];
 volatile bool tcp_task_started = false;
+uint32_t second_temp = 0;
+uint32_t fraction_temp = 0;
+
 
 /******************************************************************************
 * Main
@@ -167,6 +174,19 @@ int main()
 /* Interrupt handler callback function */
 void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
 {
+	if (sync_received)
+	{
+		second_temp = second;
+		fraction_temp = fraction;
+		sync_received = 0;
+		printf("tcp_client_task: second = %lu, fraction = %lu\n", second_temp, fraction_temp);
+	}
+	else
+	{
+		second_temp = second_temp + (fraction_temp + ADC_SAMPLING_PERIOD_US) / 1000000;
+		fraction_temp = (fraction_temp + ADC_SAMPLING_PERIOD_US) % 1000000;
+	}
+
 	/* Wait for at least t_CSSC and set CS HIGH */
 	cyhal_gpio_write(ADS1298_CS, false);
 	sendPacket();
@@ -182,20 +202,22 @@ void tcp_client_task(void *arg)
 	__enable_irq();
 
 	tcp_task_started = true;
+	tcp_pkt_buf.device_id = DEVICE_ID;
 
 	for(;;)
 	{
 		xQueueReceive(tcp_client_queue, &tcp_pkt_buf, portMAX_DELAY);
 
-		if (sync_received)
-		{
-			printf("tcp_client_task: second = %lu, frac = %lu\n", second, fraction);
-			sync_received = 0;
-		}
+		__disable_irq();
+		tcp_pkt_buf.sync_s = second_temp;
+		tcp_pkt_buf.sync_f = fraction_temp;
+		__enable_irq();
 
-		cyhal_gpio_write(ADS1298_DEBUG, false);
-		netconn_write(conn, &tcp_pkt_buf, sizeof(tcp_data_packet_t), NETCONN_NOFLAG);
-		cyhal_gpio_write(ADS1298_DEBUG, true);
+		tcp_pkt_buf.data[0] = tcp_pkt_buf.data[5];
+		tcp_pkt_buf.data[1] = tcp_pkt_buf.data[4];
+		tcp_pkt_buf.data[2] = tcp_pkt_buf.data[3];
+
+		netconn_write(conn, &tcp_pkt_buf, 12, NETCONN_NOFLAG);
 	}
 }
 

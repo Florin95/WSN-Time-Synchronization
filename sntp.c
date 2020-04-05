@@ -279,8 +279,8 @@ sntp_format_time(s32_t sec)
 }
 #endif /* LWIP_DEBUG && !sntp_format_time */
 
-int32_t second = 0;
-int32_t fraction = 0;
+uint32_t second = 0;
+uint32_t fraction = 0;
 uint8_t sync_received = 0;
 /**
  * SNTP processing of received timestamp

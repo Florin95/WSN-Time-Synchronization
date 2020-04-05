@@ -161,9 +161,6 @@ volatile tcp_data_packet_t tcp_packet;
 
 void ConfigureRxDma()
 {
-	tcp_packet.timestamp = 0;
-	tcp_packet.sync = 0xBB;
-
 	cy_en_dma_status_t dma_init_status;
     cy_stc_sysint_t intConfig =
     {
@@ -215,8 +212,6 @@ void RxDmaComplete(void)
 		/* Send TCP data packet to the tcp_client_task */
 		xQueueSendToBackFromISR(tcp_client_queue, &tcp_packet, &xHigherPriorityTaskWoken);
 	}
-
-	tcp_packet.timestamp++;
 
     /* Check interrupt cause to capture errors. */
     if(CY_DMA_INTR_CAUSE_COMPLETION == Cy_DMA_Channel_GetStatus(RxDma_HW, RxDma_CHANNEL))

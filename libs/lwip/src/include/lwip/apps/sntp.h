@@ -58,8 +58,8 @@ u8_t sntp_enabled(void);
 void sntp_setserver(u8_t idx, const ip_addr_t *addr);
 const ip_addr_t* sntp_getserver(u8_t idx);
 
-extern int32_t second;
-extern int32_t fraction;
+extern uint32_t second;
+extern uint32_t fraction;
 extern uint8_t sync_received;
 
 #if SNTP_MONITOR_SERVER_REACHABILITY
