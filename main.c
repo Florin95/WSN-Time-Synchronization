@@ -37,12 +37,12 @@
                                        (((uint32_t) b) << 8) |\
                                        ((uint32_t) a))
 
-#define TCP_SERVER_IP_ADDRESS          MAKE_IPV4_ADDRESS(192, 168, 1, 6)
+#define TCP_SERVER_IP_ADDRESS          MAKE_IPV4_ADDRESS(192, 168, 1, 4)
 #define TCP_SERVER_PORT      		   50007
 
 #define TCP_CLIENT_TASK_STACK_SIZE     (1024*5)
 #define TCP_CLIENT_TASK_PRIORITY       (1)
-#define TCP_CLIENT_TASK_QUEUE_LEN      (500)
+#define TCP_CLIENT_TASK_QUEUE_LEN      (400)
 #define CLIENT_TASK_Q_TICKS_TO_TIMEOUT (100)
 #define RTOS_TASK_TICKS_TO_WAIT        (100)
 
@@ -56,7 +56,7 @@
 #define WREG                    (0x40)
 #define SDATAC                  (0x11)
 #define RDATAC                  (0x10)
-#define CONFIG1                 (0x84)
+#define CONFIG1                 (0x84) // 2KHz
 #define CONFIG2                 (0x00)
 #define CONFIG3                 (0xC0)
 
@@ -71,6 +71,7 @@
 * Function Prototypes
 ******************************************************************************/
 void tcp_client_task(void *arg);
+void data_received_task(void *arg);
 void ads1298_startup_procedure();
 void setup_drdy_interrupt();
 void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event);
@@ -83,6 +84,7 @@ void initialize_sntp(void);
 /* Handle of the Queue to send TCP data packets */
 volatile QueueHandle_t tcp_client_queue;
 TaskHandle_t networkTaskHandle = NULL;
+TaskHandle_t dataReceivedTaskHandle = NULL;
 /* Packet instance */
 tcp_data_packet_t tcp_pkt_buf;
 /* The primary WIFI driver  */
@@ -161,6 +163,13 @@ int main()
         CY_ASSERT(0);
     }
 
+    xReturned = xTaskCreate(data_received_task, "Data received task", TCP_CLIENT_TASK_STACK_SIZE, NULL,
+                1, &dataReceivedTaskHandle);
+    if( xReturned != pdPASS )
+    {
+        CY_ASSERT(0);
+    }
+
     /* Start the FreeRTOS scheduler */
     vTaskStartScheduler();
 
@@ -190,6 +199,38 @@ void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
 	/* Wait for at least t_CSSC and set CS HIGH */
 	cyhal_gpio_write(ADS1298_CS, false);
 	sendPacket();
+}
+
+/* Task used to receive data from other devices.*/
+void data_received_task(void *arg)
+{
+    struct netbuf* netbuf = NULL;
+    char *ptr;
+    uint16_t plen;
+    volatile err_t recv_err;
+
+	for(;;)
+	{
+		if(tcp_task_started)
+		{
+	        while (( recv_err = netconn_recv(conn, &netbuf)) == ERR_OK)
+	        {
+	            do
+	            {
+	                netbuf_data(netbuf, (void *)&ptr, &plen);
+
+					for(int i = 0; i < plen; i++)
+					{
+						printf("%c", ptr[i]);
+					}
+					printf("\n");
+	            }
+	            while (netbuf_next(netbuf) >= 0);
+
+	            netbuf_delete(netbuf);
+	        }
+		}
+	}
 }
 
 /* Task used to establish a connection to a remote TCP server and send data.*/

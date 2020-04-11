@@ -1,13 +1,13 @@
 clc; clear;
 
-fileID = fopen('log.log', 'r');
+fileID = fopen('C:\Users\Nastase\Desktop\log.log', 'r');
 
 A = fread(fileID, Inf, 'int32');
 fclose(fileID);
 
 % Extract each field
 ts_s = A(1:3:end);
-ts_f = A(2:3:end);
+ts_f = A(2:3:end); 
 data = A(3:3:end);
 clear A;
 
@@ -19,8 +19,14 @@ ts_s = ts_s(items_to_remove:end);
 ts_f = ts_f(items_to_remove:end);
 data = data(items_to_remove:end);
 
+% Make the vectors equal in length
+len = min([length(ts_s), length(ts_f), length(data)]);
+ts_s = ts_s(1:len);
+ts_f = ts_f(1:len);
+data = data(1:len);
+
 % Remove time offset
-ts_s = ts_s - ts_s(1);
+ts_s = ts_s - min(ts_s);
 
 % Get the device id for each packet
 device_id = zeros(length(data), 1);
@@ -31,7 +37,7 @@ end
 
 data = bitsra(data,8);
 % Convert to microvolts
-data = data*0.022;
+data = data*0.044;
 
 % Convert to us
 ts_s = ts_s .* 1000000;
@@ -40,13 +46,16 @@ seconds = unique(ts_s);
 % Add the fractional part (in microseconds)
 ts_s = ts_s + ts_f;
 % Remove the offset
-ts_s = ts_s - ts_s(1);
+ts_s = ts_s - min(ts_s);
 
-plot(ts_s, data);
+plot(ts_s(1:len), data(1:len));
 
 for i=1:length(seconds)
-    line([seconds(i), seconds(i)], [-300000,300000], 'color', 'red');
+    line([seconds(i), seconds(i)], [0,100000], 'color', 'red');
 end
+
+% [x,y] = ginput(2); % click on each point
+% dx = diff(x)
 
 % set(gca,'XTick',unique(ts_s));
 % set(gca,'XTickLabel',[4 8 15 21] );
