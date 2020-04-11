@@ -101,7 +101,7 @@ uint8_t received_data[ADS1298_BYTES_PER_FRAME];
 volatile bool tcp_task_started = false;
 uint32_t second_temp = 0;
 uint32_t fraction_temp = 0;
-
+uint8_t stream_data = 0;
 
 /******************************************************************************
 * Main
@@ -205,8 +205,10 @@ void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
 void data_received_task(void *arg)
 {
     struct netbuf* netbuf = NULL;
-    char *ptr;
-    uint16_t plen;
+    uint8_t *ptr;
+    uint16_t plen = 0;
+    uint32_t *message;
+    uint16_t message_len = 0;
     volatile err_t recv_err;
 
 	for(;;)
@@ -218,12 +220,19 @@ void data_received_task(void *arg)
 	            do
 	            {
 	                netbuf_data(netbuf, (void *)&ptr, &plen);
+	                message = (uint32_t*)ptr;
+	                message_len = plen / 4;
 
 					for(int i = 0; i < plen; i++)
 					{
 						printf("%c", ptr[i]);
 					}
 					printf("\n");
+
+					if (message[0] == 0x12345678)
+					{
+						stream_data = 1;
+					}
 	            }
 	            while (netbuf_next(netbuf) >= 0);
 
@@ -254,9 +263,18 @@ void tcp_client_task(void *arg)
 		tcp_pkt_buf.sync_f = fraction_temp;
 		__enable_irq();
 
-		tcp_pkt_buf.data[0] = tcp_pkt_buf.data[5];
-		tcp_pkt_buf.data[1] = tcp_pkt_buf.data[4];
-		tcp_pkt_buf.data[2] = tcp_pkt_buf.data[3];
+		if (stream_data)
+		{
+			tcp_pkt_buf.data[0] = tcp_pkt_buf.data[5];
+			tcp_pkt_buf.data[1] = tcp_pkt_buf.data[4];
+			tcp_pkt_buf.data[2] = tcp_pkt_buf.data[3];
+		}
+		else
+		{
+			tcp_pkt_buf.data[0] = 0;
+			tcp_pkt_buf.data[1] = 0;
+			tcp_pkt_buf.data[2] = 0;
+		}
 
 		netconn_write(conn, &tcp_pkt_buf, 12, NETCONN_NOFLAG);
 	}
