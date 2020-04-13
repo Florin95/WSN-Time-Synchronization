@@ -51,7 +51,7 @@ ts_s = ts_s - min(ts_s);
 plot(ts_s(1:len), data(1:len));
 
 for i=1:length(seconds)
-    line([seconds(i), seconds(i)], [0,100000], 'color', 'red');
+    line([seconds(i), seconds(i)], [0,150000], 'color', 'red');
 end
 
 % [x,y] = ginput(2); % click on each point

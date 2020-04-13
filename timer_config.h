@@ -1,6 +1,9 @@
 #ifndef TIMER_CONFIG_H_
 #define TIMER_CONFIG_H_
 
+#include <FreeRTOS.h>
+#include <task.h>
+#include <queue.h>
 
 /*******************************************************************************
 * Macros

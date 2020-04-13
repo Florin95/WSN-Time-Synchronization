@@ -4,7 +4,8 @@
 #include <FreeRTOS.h>
 #include <task.h>
 #include <queue.h>
-
+#include "types.h"
+#include "main_include.h"
 
 static void isr_timer(void *callback_arg, cyhal_timer_event_t event);
 
@@ -81,9 +82,6 @@ cyhal_timer_t tcp_send_timer;
 	    cyhal_timer_stop(&tcp_send_timer);
  }
 
- extern TaskHandle_t networkTaskHandle;
- extern volatile bool tcp_client_started;
- uint32_t dummy = 0;
 /*******************************************************************************
 * Function Name: isr_timer
 ********************************************************************************
@@ -100,19 +98,35 @@ static void isr_timer(void *callback_arg, cyhal_timer_event_t event)
     (void) callback_arg;
     (void) event;
 
+    compute_timestamps();
+    tcp_data_packet_t tcp_packet;
+
 	/* Set the interrupt flag and process it from the main while(1) loop */
     timer_interrupt_flag = true;
 
-//    if (tcp_client_started)
-//    {
-//		BaseType_t xHigherPriorityTaskWoken = pdTRUE;
-//
-//		/* Notify the led_task about the change in LED state */
-//		xTaskNotifyFromISR(networkTaskHandle, dummy, eSetValueWithoutOverwrite,
-//						   &xHigherPriorityTaskWoken);
-//
-//		portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-//    }
+	BaseType_t xHigherPriorityTaskWoken;
+	/* We have not woken a task at the start of the ISR. */
+	xHigherPriorityTaskWoken = pdFALSE;
+
+	// Associate a voltage of 100 mV to a digital value of 1.
+	// 100 000 / 0.044
+	uint32_t sample_100mV = 2272727;
+
+    /* Read the logic level on the input pin */
+    bool read_val = cyhal_gpio_read(DIG_IN);
+
+    volatile uint8_t level = (uint8_t)read_val;
+    tcp_packet.data[5] = level * (sample_100mV & 0x000000FF);
+    tcp_packet.data[4] = level * ((sample_100mV & 0x0000FF00) >> 8);
+    tcp_packet.data[3] = level * ((sample_100mV & 0x00FF0000) >> 16);
+
+	if(tcp_task_started)
+	{
+		/* Send TCP data packet to the tcp_client_task */
+		xQueueSendToBackFromISR(tcp_client_queue, &tcp_packet, &xHigherPriorityTaskWoken);
+	}
+
+	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 /* [] END OF FILE */

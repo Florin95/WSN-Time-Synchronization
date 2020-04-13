@@ -24,59 +24,7 @@
 #include "SPIMaster.h"
 #include "SpiDma.h"
 #include "types.h"
-
-/******************************************************************************
-* Macros
-******************************************************************************/
-#define DEVICE_ID                      (0)
-
-#define MAX_CONNECTION_RETRIES         (10u)
-
-#define MAKE_IPV4_ADDRESS(a, b, c, d)  ((((uint32_t) d) << 24) | \
-                                       (((uint32_t) c) << 16) | \
-                                       (((uint32_t) b) << 8) |\
-                                       ((uint32_t) a))
-
-#define TCP_SERVER_IP_ADDRESS          MAKE_IPV4_ADDRESS(192, 168, 1, 4)
-#define TCP_SERVER_PORT      		   50007
-
-#define TCP_CLIENT_TASK_STACK_SIZE     (1024*5)
-#define TCP_CLIENT_TASK_PRIORITY       (1)
-#define TCP_CLIENT_TASK_QUEUE_LEN      (400)
-#define CLIENT_TASK_Q_TICKS_TO_TIMEOUT (100)
-#define RTOS_TASK_TICKS_TO_WAIT        (100)
-
-/*ADS1298 defines*/
-#define ADC_SAMPLING_PERIOD_US  (500)
-
-#define CONFIG1_START           (0X01)
-#define CONFIG2_START           (0x02)
-#define CONFIG3_START           (0x03)
-
-#define WREG                    (0x40)
-#define SDATAC                  (0x11)
-#define RDATAC                  (0x10)
-#define CONFIG1                 (0x84) // 2KHz
-#define CONFIG2                 (0x00)
-#define CONFIG3                 (0xC0)
-
-#define ADS1298_PDWN            (P9_0)
-#define ADS1298_RST             (P9_1)
-#define ADS1298_START           (P9_2)
-#define ADS1298_DRDY            (P0_2)
-
-#define ADS1298_DEBUG           (P9_5)
-
-/******************************************************************************
-* Function Prototypes
-******************************************************************************/
-void tcp_client_task(void *arg);
-void data_received_task(void *arg);
-void ads1298_startup_procedure();
-void setup_drdy_interrupt();
-void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event);
-void init_tcp_client();
-void initialize_sntp(void);
+#include "main_include.h"
 
 /******************************************************************************
 * Global Variables
@@ -117,21 +65,29 @@ int main()
     result = cybsp_init() ;
     CY_ASSERT(result == CY_RSLT_SUCCESS);
 
-    // Magic that makes the DMA work (both RX and TX)!
-	Cy_TrigMux_Connect(TRIG0_IN_TR_GROUP13_OUTPUT13, TRIG0_OUT_CPUSS_DW0_TR_IN3, false, TRIGGER_TYPE_LEVEL);
-	Cy_TrigMux_Connect(TRIG0_IN_TR_GROUP13_OUTPUT5, TRIG0_OUT_CPUSS_DW0_TR_IN2, false, TRIGGER_TYPE_LEVEL);
-	Cy_TrigMux_Connect(TRIG13_IN_SCB1_TR_RX_REQ, TRIG13_OUT_TR_GROUP0_INPUT40, false, TRIGGER_TYPE_LEVEL);
-	Cy_TrigMux_Connect(TRIG13_IN_SCB1_TR_TX_REQ, TRIG13_OUT_TR_GROUP0_INPUT32, false, TRIGGER_TYPE_LEVEL);
+	if(USE_ADC)
+	{
+		// Magic that makes the DMA work (both RX and TX)!
+		Cy_TrigMux_Connect(TRIG0_IN_TR_GROUP13_OUTPUT13, TRIG0_OUT_CPUSS_DW0_TR_IN3, false, TRIGGER_TYPE_LEVEL);
+		Cy_TrigMux_Connect(TRIG0_IN_TR_GROUP13_OUTPUT5, TRIG0_OUT_CPUSS_DW0_TR_IN2, false, TRIGGER_TYPE_LEVEL);
+		Cy_TrigMux_Connect(TRIG13_IN_SCB1_TR_RX_REQ, TRIG13_OUT_TR_GROUP0_INPUT40, false, TRIGGER_TYPE_LEVEL);
+		Cy_TrigMux_Connect(TRIG13_IN_SCB1_TR_TX_REQ, TRIG13_OUT_TR_GROUP0_INPUT32, false, TRIGGER_TYPE_LEVEL);
 
-	// Init SPI Master
-    initMaster();
+		// Init SPI Master
+		initMaster();
 
-    // Configure Rx and Tx DMA channels
-    ConfigureTxDma(spi_transmit_data);
-    ConfigureRxDma();
+		// Configure Rx and Tx DMA channels
+		ConfigureTxDma(spi_transmit_data);
+		ConfigureRxDma();
 
-    // Configure the interrupt pin for ADS1298 DRDY signal
-    setup_drdy_interrupt();
+		// Configure the interrupt pin for ADS1298 DRDY signal
+		setup_drdy_interrupt();
+	}
+	else
+	{
+	    result = cyhal_gpio_init(DIG_IN, CYHAL_GPIO_DIR_INPUT, CYHAL_GPIO_DRIVE_NONE, false);
+	    timer_init();
+	}
 
     cyhal_gpio_init(ADS1298_DEBUG, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
 
@@ -180,8 +136,7 @@ int main()
 /******************************************************************************
 * Functions
 ******************************************************************************/
-/* Interrupt handler callback function */
-void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
+void compute_timestamps()
 {
 	if (sync_received)
 	{
@@ -195,6 +150,12 @@ void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
 		second_temp = second_temp + (fraction_temp + ADC_SAMPLING_PERIOD_US) / 1000000;
 		fraction_temp = (fraction_temp + ADC_SAMPLING_PERIOD_US) % 1000000;
 	}
+}
+
+/* Interrupt handler callback function */
+void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
+{
+	compute_timestamps();
 
 	/* Wait for at least t_CSSC and set CS HIGH */
 	cyhal_gpio_write(ADS1298_CS, false);
@@ -232,6 +193,7 @@ void data_received_task(void *arg)
 					if (message[0] == 0x12345678)
 					{
 						stream_data = 1;
+						printf("Streaming started! \n");
 					}
 	            }
 	            while (netbuf_next(netbuf) >= 0);
@@ -252,7 +214,6 @@ void tcp_client_task(void *arg)
 	__enable_irq();
 
 	tcp_task_started = true;
-	tcp_pkt_buf.device_id = DEVICE_ID;
 
 	for(;;)
 	{
@@ -262,6 +223,8 @@ void tcp_client_task(void *arg)
 		tcp_pkt_buf.sync_s = second_temp;
 		tcp_pkt_buf.sync_f = fraction_temp;
 		__enable_irq();
+
+		tcp_pkt_buf.device_id = DEVICE_ID;
 
 		if (stream_data)
 		{
