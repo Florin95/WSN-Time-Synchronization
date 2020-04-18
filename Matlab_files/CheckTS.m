@@ -1,6 +1,6 @@
-clc; clear;
+function [ts, data, seconds] = CheckTS(fileName)
 
-fileID = fopen('C:\Users\Nastase\Desktop\log.log', 'r');
+fileID = fopen(fileName, 'r');
 
 A = fread(fileID, Inf, 'int32');
 fclose(fileID);
@@ -48,21 +48,9 @@ ts_s = ts_s + ts_f;
 % Remove the offset
 ts_s = ts_s - min(ts_s);
 
-plot(ts_s(1:len), data(1:len));
+ts = ts_s;
 
-for i=1:length(seconds)
-    line([seconds(i), seconds(i)], [0,150000], 'color', 'red');
 end
-
-% [x,y] = ginput(2); % click on each point
-% dx = diff(x)
-
-% set(gca,'XTick',unique(ts_s));
-% set(gca,'XTickLabel',[4 8 15 21] );
-% set(gca,'YGrid','off','XGrid','on');
-
-
-
 
 
 
