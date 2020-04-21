@@ -1,18 +1,22 @@
-
 clc; clear;
 
-fileName0 = 'C:\Users\Nastase\Desktop\log_ADC_0.log';
-fileName1 = 'C:\Users\Nastase\Desktop\log_ADC_1.log';
+en_dev1 = 1;
+
+fileName0 = 'C:\Users\Nastase\Desktop\dev0.log';
+fileName1 = 'C:\Users\Nastase\Desktop\dev1.log';
 
 [ts0, data0, seconds0] = CheckTS(fileName0);
-[ts1, data1, seconds1] = CheckTS(fileName1);
-
-% ts1 = ts1 - (ts1(1) - ts0(1));
-data1 = data1 + 1000;
+if (en_dev1)
+    [ts1, data1, seconds1] = CheckTS(fileName1);
+end
 
 plot(ts0, data0);
-hold on;
-plot(ts1, data1, 'color', 'red');
+
+if (en_dev1)
+    hold on;
+    plot(ts1, data1, 'color', 'red');
+end
+
 grid on;
 
 for i=1:length(seconds0)
@@ -20,6 +24,7 @@ for i=1:length(seconds0)
         'LineWidth', 4);
 end
 
+%%
 % [x,y] = ginput(2); % click on each point
 % dx = diff(x)
 

@@ -4,6 +4,7 @@
 /* Data structure to TCP data and data length */
 typedef struct
 {
+	uint32_t sync_word;
 	uint32_t sync_s;
 	uint32_t sync_f;
 	uint8_t device_id;

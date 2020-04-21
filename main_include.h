@@ -14,6 +14,8 @@
 ******************************************************************************/
 #define USE_ADC                        (1)
 #define DEVICE_ID                      (USE_ADC)
+#define SYNC_WORD                      (0xA5A5A5A5)
+#define START_STREAM_CMD               (0xA0A0A0A0)
 
 #define DIG_IN                         (P5_0)
 

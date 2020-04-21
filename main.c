@@ -50,6 +50,7 @@ volatile bool tcp_task_started = false;
 uint32_t second_temp = 0;
 uint32_t fraction_temp = 0;
 uint8_t stream_data = 0;
+uint8_t sync_done = 0;
 
 /******************************************************************************
 * Main
@@ -140,6 +141,7 @@ void compute_timestamps()
 {
 	if (sync_received)
 	{
+		sync_done = 1;
 		second_temp = second;
 		fraction_temp = fraction;
 		sync_received = 0;
@@ -190,7 +192,7 @@ void data_received_task(void *arg)
 					}
 					printf("\n");
 
-					if (message[0] == 0x12345678)
+					if (message[0] == START_STREAM_CMD)
 					{
 						stream_data = 1;
 						printf("Streaming started! \n");
@@ -219,6 +221,8 @@ void tcp_client_task(void *arg)
 	{
 		xQueueReceive(tcp_client_queue, &tcp_pkt_buf, portMAX_DELAY);
 
+		tcp_pkt_buf.sync_word = SYNC_WORD;
+
 		__disable_irq();
 		tcp_pkt_buf.sync_s = second_temp;
 		tcp_pkt_buf.sync_f = fraction_temp;
@@ -239,7 +243,10 @@ void tcp_client_task(void *arg)
 			tcp_pkt_buf.data[2] = 0;
 		}
 
-		netconn_write(conn, &tcp_pkt_buf, 12, NETCONN_NOFLAG);
+		if (sync_done)
+		{
+			netconn_write(conn, &tcp_pkt_buf, 16, NETCONN_NOFLAG);
+		}
 	}
 }
 

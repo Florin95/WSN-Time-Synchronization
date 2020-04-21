@@ -2,14 +2,21 @@ function [ts, data, seconds] = CheckTS(fileName)
 
 fileID = fopen(fileName, 'r');
 
-A = fread(fileID, Inf, 'int32');
+A = fread(fileID, Inf, 'uint32');
 fclose(fileID);
 
 % Extract each field
-ts_s = A(1:3:end);
-ts_f = A(2:3:end); 
-data = A(3:3:end);
+ts_s = A(2:4:end);
+ts_f = A(3:4:end); 
+data = A(4:4:end);
 clear A;
+
+% Get the device id for each packet
+device_id = zeros(length(data), 1);
+
+% for i = 1:length(data)
+%     device_id(i) = bitand(data(i), hex2dec('FF'), 'int32');
+% end
 
 % Get the number of packets prior to synchronizing
 items_to_remove = length(ts_s(ts_s <= 1000)) + 1;
@@ -27,13 +34,6 @@ data = data(1:len);
 
 % Remove time offset
 ts_s = ts_s - min(ts_s);
-
-% Get the device id for each packet
-device_id = zeros(length(data), 1);
-
-for i = 1:length(data)
-    device_id(i) = bitand(data(i), hex2dec('FF'), 'int32');
-end
 
 data = bitsra(data,8);
 % Convert to microvolts
