@@ -4,6 +4,7 @@
 #include <FreeRTOS.h>
 #include <task.h>
 #include <queue.h>
+#include "types.h"
 
 /*******************************************************************************
 * Macros
@@ -13,7 +14,7 @@
 #define TCP_TIMER_CLOCK_HZ          (1000000)
 
 /* LED blink timer period value */
-#define TCP_TIMER_PERIOD            (500)
+#define TCP_TIMER_PERIOD            (1)
 
 
 /*******************************************************************************
@@ -22,6 +23,7 @@
 extern bool timer_interrupt_flag;
 /* Timer object used for blinking the LED */
 extern cyhal_timer_t tcp_send_timer;
+extern node_time_t node_time;
 
 /*******************************************************************************
 * Function Prototypes

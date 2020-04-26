@@ -87,8 +87,9 @@ int main()
 	else
 	{
 	    result = cyhal_gpio_init(DIG_IN, CYHAL_GPIO_DIR_INPUT, CYHAL_GPIO_DRIVE_NONE, false);
-	    timer_init();
 	}
+
+	timer_init();
 
     cyhal_gpio_init(ADS1298_DEBUG, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
 
@@ -137,7 +138,7 @@ int main()
 /******************************************************************************
 * Functions
 ******************************************************************************/
-void compute_timestamps()
+void compute_sntp_timestamps()
 {
 	if (sync_received)
 	{
@@ -157,7 +158,10 @@ void compute_timestamps()
 /* Interrupt handler callback function */
 void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
 {
-	compute_timestamps();
+	if (SYNC_TYPE == SNTP)
+	{
+		compute_sntp_timestamps();
+	}
 
 	/* Wait for at least t_CSSC and set CS HIGH */
 	cyhal_gpio_write(ADS1298_CS, false);
@@ -221,7 +225,7 @@ void tcp_client_task(void *arg)
 	{
 		xQueueReceive(tcp_client_queue, &tcp_pkt_buf, portMAX_DELAY);
 
-		tcp_pkt_buf.sync_word = SYNC_WORD;
+		tcp_pkt_buf.alignment_word = ALIGNMENT_WORD;
 
 		__disable_irq();
 		tcp_pkt_buf.sync_s = second_temp;
@@ -343,8 +347,11 @@ void init_tcp_client()
     }
     printf("IP Address %s assigned\n", ip4addr_ntoa(&net->ip_addr.u_addr.ip4));
 
-    /*Initialize the SNTP connection.*/
-    initialize_sntp();
+    if (SYNC_TYPE == SNTP)
+    {
+    	/*Initialize the SNTP connection.*/
+    	initialize_sntp();
+    }
 
 	/* Create a new TCP connection */
 	conn = netconn_new(NETCONN_TCP);

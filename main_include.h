@@ -1,20 +1,17 @@
-/*
- * main_include.h
- *
- *  Created on: 11 apr. 2020
- *      Author: Nastase
- */
-
 #ifndef MAIN_INCLUDE_H_
 #define MAIN_INCLUDE_H_
-
 
 /******************************************************************************
 * Macros
 ******************************************************************************/
-#define USE_ADC                        (1)
+/* 0 - SNTP; 1 - TPSN */
+#define SNTP                           (0)
+#define TPSN                           (1)
+#define SYNC_TYPE                      (SNTP)
+#define USE_ADC                        (0)
+
 #define DEVICE_ID                      (USE_ADC)
-#define SYNC_WORD                      (0xA5A5A5A5)
+#define ALIGNMENT_WORD                 (0xA5A5A5A5)
 #define START_STREAM_CMD               (0xA0A0A0A0)
 
 #define DIG_IN                         (P5_0)
@@ -46,6 +43,7 @@
 #define SDATAC                  (0x11)
 #define RDATAC                  (0x10)
 #define CONFIG1                 (0x84) // 2KHz
+#define SAMPLING_PERIOD         (500)  // us
 #define CONFIG2                 (0x00)
 #define CONFIG3                 (0xC0)
 
@@ -67,7 +65,7 @@ void setup_drdy_interrupt();
 void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event);
 void init_tcp_client();
 void initialize_sntp(void);
-void compute_timestamps();
+void compute_sntp_timestamps();
 
 /******************************************************************************
 * Variables
