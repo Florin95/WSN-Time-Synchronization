@@ -23,7 +23,8 @@
 extern bool timer_interrupt_flag;
 /* Timer object used for blinking the LED */
 extern cyhal_timer_t tcp_send_timer;
-extern node_time_t node_time;
+extern volatile node_time_t node_time;
+extern volatile uint8_t do_tpsn_sync;
 
 /*******************************************************************************
 * Function Prototypes

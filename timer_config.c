@@ -9,13 +9,11 @@
 
 static void isr_timer(void *callback_arg, cyhal_timer_event_t event);
 
-
 bool timer_interrupt_flag = false;
 /* Timer object used for blinking the LED */
 cyhal_timer_t tcp_send_timer;
-node_time_t node_time;
-uint32_t period = 0;
-
+volatile node_time_t node_time;
+volatile uint32_t period = 0;
 
 void timer_init(void)
 {
@@ -97,9 +95,18 @@ static void isr_timer(void *callback_arg, cyhal_timer_event_t event)
     node_time.seconds = node_time.seconds + (node_time.microseconds + 1) / 1000000;
     node_time.microseconds = (node_time.microseconds + 1) % 1000000;
 
-    if ((period == 0) && (USE_ADC == 0) && (SYNC_TYPE == SNTP))
+    if ((node_time.seconds % SYNC_INTERVAL == 0) && (node_time.microseconds == 0) && (SYNC_TYPE == TPSN))
     {
-        compute_sntp_timestamps();
+    	do_tpsn_sync = 1;
+    }
+
+    if ((period == 0) && (USE_ADC == 0))
+    {
+    	if (SYNC_TYPE == SNTP)
+    	{
+    		compute_sntp_timestamps();
+    	}
+
         tcp_data_packet_t tcp_packet;
 
     	BaseType_t xHigherPriorityTaskWoken;

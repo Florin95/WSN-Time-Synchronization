@@ -51,6 +51,7 @@ uint32_t second_temp = 0;
 uint32_t fraction_temp = 0;
 uint8_t stream_data = 0;
 uint8_t sync_done = 0;
+volatile uint8_t do_tpsn_sync = 0;
 
 /******************************************************************************
 * Main
@@ -168,13 +169,28 @@ void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
 	sendPacket();
 }
 
+/* Updates the local time using the specified offsets. */
+void update_time(int32_t sec_offset, int32_t microsec_offset)
+{
+	__disable_irq();
+    node_time.seconds = node_time.seconds + sec_offset;
+
+    if (node_time.microseconds + microsec_offset < 0)
+    	node_time.seconds--;
+    else if (node_time.microseconds + microsec_offset >= 1000000)
+    	node_time.seconds++;
+
+    node_time.microseconds = (1000000 + node_time.microseconds + microsec_offset) % 1000000;
+    __enable_irq();
+}
+
 /* Task used to receive data from other devices.*/
 void data_received_task(void *arg)
 {
     struct netbuf* netbuf = NULL;
     uint8_t *ptr;
     uint16_t plen = 0;
-    uint32_t *message;
+    volatile uint32_t *message;
     uint16_t message_len = 0;
     volatile err_t recv_err;
 
@@ -200,6 +216,27 @@ void data_received_task(void *arg)
 					{
 						stream_data = 1;
 						printf("Streaming started! \n");
+					}
+					else if (message[0] == TPSN_SYNC_WORD)
+					{
+						sync_done = 0;
+						int32_t sec_offset = 0;
+						int32_t microsec_offset = 0;
+
+						// Sent back by the TCP server
+						volatile uint64_t t1 = (uint64_t)message[1] * 1000000 + message[2];
+						// t2 and t3 are server timestamps
+						volatile uint64_t t2 = (uint64_t)message[3] * 1000000 + message[4];
+						volatile uint64_t t3 = (uint64_t)message[5] * 1000000 + message[6];
+						// The time at which the sync packet was received
+						volatile uint64_t t4 = (uint64_t)node_time.seconds * 1000000 + node_time.microseconds;
+
+						volatile uint64_t delta = 0;
+						delta = (uint64_t)(((t2 - t1) - (t4 - t3)) / 2);
+
+						sec_offset = (int32_t)(delta / 1000000);
+						microsec_offset = (int32_t)(delta % 1000000);
+						update_time(sec_offset, microsec_offset);
 					}
 	            }
 	            while (netbuf_next(netbuf) >= 0);
@@ -249,6 +286,18 @@ void tcp_client_task(void *arg)
 
 		if (sync_done)
 		{
+			if (do_tpsn_sync)
+			{
+				do_tpsn_sync = 0;
+				tcp_pkt_buf.alignment_word = TPSN_SYNC_WORD;
+			}
+
+			netconn_write(conn, &tcp_pkt_buf, 16, NETCONN_NOFLAG);
+		}
+		else if (do_tpsn_sync)
+		{
+			do_tpsn_sync = 0;
+			tcp_pkt_buf.alignment_word = TPSN_SYNC_WORD;
 			netconn_write(conn, &tcp_pkt_buf, 16, NETCONN_NOFLAG);
 		}
 	}
