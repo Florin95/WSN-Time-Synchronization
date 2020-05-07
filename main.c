@@ -219,7 +219,6 @@ void data_received_task(void *arg)
 					}
 					else if (message[0] == TPSN_SYNC_WORD)
 					{
-						sync_done = 0;
 						int32_t sec_offset = 0;
 						int32_t microsec_offset = 0;
 
@@ -237,6 +236,8 @@ void data_received_task(void *arg)
 						sec_offset = (int32_t)(delta / 1000000);
 						microsec_offset = (int32_t)(delta % 1000000);
 						update_time(sec_offset, microsec_offset);
+
+						sync_done = 1;
 					}
 	            }
 	            while (netbuf_next(netbuf) >= 0);
@@ -265,8 +266,16 @@ void tcp_client_task(void *arg)
 		tcp_pkt_buf.alignment_word = ALIGNMENT_WORD;
 
 		__disable_irq();
-		tcp_pkt_buf.sync_s = second_temp;
-		tcp_pkt_buf.sync_f = fraction_temp;
+		if (SYNC_TYPE == SNTP)
+		{
+			tcp_pkt_buf.sync_s = second_temp;
+			tcp_pkt_buf.sync_f = fraction_temp;
+		}
+		else
+		{
+			tcp_pkt_buf.sync_s = node_time.seconds;
+			tcp_pkt_buf.sync_f = node_time.microseconds;
+		}
 		__enable_irq();
 
 		tcp_pkt_buf.device_id = DEVICE_ID;

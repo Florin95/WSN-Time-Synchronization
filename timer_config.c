@@ -90,18 +90,20 @@ static void isr_timer(void *callback_arg, cyhal_timer_event_t event)
 
 	/* Set the interrupt flag and process it from the main while(1) loop */
     timer_interrupt_flag = true;
-    period = (period + 1) % SAMPLING_PERIOD;
-
-    node_time.seconds = node_time.seconds + (node_time.microseconds + 1) / 1000000;
-    node_time.microseconds = (node_time.microseconds + 1) % 1000000;
+    period = period + TCP_TIMER_PERIOD;
 
     if ((node_time.seconds % SYNC_INTERVAL == 0) && (node_time.microseconds == 0) && (SYNC_TYPE == TPSN))
     {
     	do_tpsn_sync = 1;
     }
 
-    if ((period == 0) && (USE_ADC == 0))
+    node_time.seconds = node_time.seconds + (node_time.microseconds + TCP_TIMER_PERIOD) / 1000000;
+    node_time.microseconds = (node_time.microseconds + TCP_TIMER_PERIOD) % 1000000;
+
+    if ((period >= SAMPLING_PERIOD) && (USE_ADC == 0))
     {
+    	period = 0;
+
     	if (SYNC_TYPE == SNTP)
     	{
     		compute_sntp_timestamps();

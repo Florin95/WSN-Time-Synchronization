@@ -33,7 +33,7 @@ ts_f = ts_f(1:len);
 data = data(1:len);
 
 % Remove time offset
-ts_s = ts_s - min(ts_s);
+% ts_s = ts_s - min(ts_s);
 
 data = bitsra(data,8);
 % Convert to microvolts
@@ -45,8 +45,9 @@ ts_s = ts_s .* 1000000;
 seconds = unique(ts_s);
 % Add the fractional part (in microseconds)
 ts_s = ts_s + ts_f;
+
 % Remove the offset
-ts_s = ts_s - min(ts_s);
+% ts_s = ts_s - min(ts_s);
 
 ts = ts_s;
 

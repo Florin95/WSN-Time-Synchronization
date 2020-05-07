@@ -4,11 +4,12 @@
 /******************************************************************************
 * Macros
 ******************************************************************************/
+#define SYNC_TYPE                      (TPSN)
+#define USE_ADC                        (1)
+
 /* 0 - SNTP; 1 - TPSN */
 #define SNTP                           (0)
 #define TPSN                           (1)
-#define SYNC_TYPE                      (TPSN)
-#define USE_ADC                        (0)
 
 #define DEVICE_ID                      (USE_ADC)
 #define TPSN_SYNC_WORD                 (0xABABABAB)
