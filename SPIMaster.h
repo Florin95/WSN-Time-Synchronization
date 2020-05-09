@@ -17,7 +17,7 @@
 #define SPI_SCLK_NUM    P10_2_NUM
 #define SPI_SS_NUM      P10_3_NUM
 
-#define ADS1298_CS      (P9_4)
+#define ADC_CS      (P9_4)
 
 /* Assign divider type and number for SPI */
 #define SPI_CLK_DIV_TYPE    (CY_SYSCLK_DIV_8_BIT)

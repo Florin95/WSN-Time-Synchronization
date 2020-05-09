@@ -43,9 +43,9 @@ struct netconn *conn;
 volatile int uxTopUsedPriority;
 volatile bool send_tcp_data = false;
 volatile bool DRDY_received = false;
-uint8_t spi_transmit_data[ADS1298_BYTES_PER_FRAME];
-uint8_t spi_receive_data[ADS1298_BYTES_PER_FRAME];
-uint8_t received_data[ADS1298_BYTES_PER_FRAME];
+uint8_t spi_transmit_data[ADC_BYTES_PER_FRAME];
+uint8_t spi_receive_data[ADC_BYTES_PER_FRAME];
+uint8_t received_data[ADC_BYTES_PER_FRAME];
 volatile bool tcp_task_started = false;
 uint32_t second_temp = 0;
 uint32_t fraction_temp = 0;
@@ -82,7 +82,7 @@ int main()
 		ConfigureTxDma(spi_transmit_data);
 		ConfigureRxDma();
 
-		// Configure the interrupt pin for ADS1298 DRDY signal
+		// Configure the interrupt pin for ADC DRDY signal
 		setup_drdy_interrupt();
 	}
 	else
@@ -92,7 +92,7 @@ int main()
 
 	timer_init();
 
-    cyhal_gpio_init(ADS1298_DEBUG, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
+    cyhal_gpio_init(ADC_DEBUG, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
 
     /* Enable global interrupts */
     __enable_irq();
@@ -105,7 +105,7 @@ int main()
     printf("\x1b[2J\x1b[;H");
 
     // Initialize the transmission and reception buffers.
-    for (int j = 0; j < ADS1298_BYTES_PER_FRAME; j++)
+    for (int j = 0; j < ADC_BYTES_PER_FRAME; j++)
     {
     	spi_transmit_data[j] = 0;
     	spi_receive_data[j] = 0;
@@ -165,7 +165,7 @@ void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
 	}
 
 	/* Wait for at least t_CSSC and set CS HIGH */
-	cyhal_gpio_write(ADS1298_CS, false);
+	cyhal_gpio_write(ADC_CS, false);
 	sendPacket();
 }
 
@@ -259,7 +259,7 @@ void tcp_client_task(void *arg)
 	init_tcp_client();
 
 	__disable_irq();
-	ads1298_startup_procedure();
+	adc_startup_procedure();
 	__enable_irq();
 
 	tcp_task_started = true;
@@ -287,6 +287,7 @@ void tcp_client_task(void *arg)
 
 		if (stream_data)
 		{
+			// Overwrite the ADC header with data from channel 1.
 			tcp_pkt_buf.data[0] = tcp_pkt_buf.data[5];
 			tcp_pkt_buf.data[1] = tcp_pkt_buf.data[4];
 			tcp_pkt_buf.data[2] = tcp_pkt_buf.data[3];
@@ -450,35 +451,35 @@ void close_tcp_connection()
 void setup_drdy_interrupt()
 {
     cy_rslt_t rslt;
-    /* Initialize pin ADS1298_DRDY as an input pin */
-    rslt = cyhal_gpio_init(ADS1298_DRDY, CYHAL_GPIO_DIR_INPUT, CYHAL_GPIO_DRIVE_NONE, false);
+    /* Initialize pin ADC_DRDY as an input pin */
+    rslt = cyhal_gpio_init(ADC_DRDY, CYHAL_GPIO_DIR_INPUT, CYHAL_GPIO_DRIVE_NONE, false);
     CY_ASSERT(CY_RSLT_SUCCESS == rslt);
     /* Register callback function - gpio_interrupt_handler and pass the value global_count */
-    cyhal_gpio_register_callback(ADS1298_DRDY, drdy_interrupt_handler, NULL);
+    cyhal_gpio_register_callback(ADC_DRDY, drdy_interrupt_handler, NULL);
     /* Enable falling edge interrupt event with interrupt priority set to 3 */
-    cyhal_gpio_enable_event(ADS1298_DRDY, CYHAL_GPIO_IRQ_FALL, 7, true);
+    cyhal_gpio_enable_event(ADC_DRDY, CYHAL_GPIO_IRQ_FALL, 7, true);
 }
 
-/*Initializes the ADS1298 and sets it into RDATAC mode.*/
-void ads1298_startup_procedure()
+/*Initializes the ADC and sets it into RDATAC mode.*/
+void adc_startup_procedure()
 {
     // Initialize GPIO as an output with strong drive mode and initial value = false (low).
-    cyhal_gpio_init(ADS1298_PDWN, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
-    cyhal_gpio_init(ADS1298_RST, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
-    cyhal_gpio_init(ADS1298_START, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, false);
+    cyhal_gpio_init(ADC_PDWN, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
+    cyhal_gpio_init(ADC_RST, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
+    cyhal_gpio_init(ADC_START, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, false);
 
-    // Set ADS pins default status.
-    cyhal_gpio_write(ADS1298_PDWN, true);
-    cyhal_gpio_write(ADS1298_RST, true);
-    cyhal_gpio_write(ADS1298_START, false);
+    // Set ADC pins default status.
+    cyhal_gpio_write(ADC_PDWN, true);
+    cyhal_gpio_write(ADC_RST, true);
+    cyhal_gpio_write(ADC_START, false);
 
     // Delay for Power-On Reset and Oscillator Start-Up.
     Cy_SysLib_Delay(500);
 
     // Issue Reset Pulse, wait for 18 t_clk.
-    cyhal_gpio_write(ADS1298_RST, false);
+    cyhal_gpio_write(ADC_RST, false);
     Cy_SysLib_Delay(20);
-    cyhal_gpio_write(ADS1298_RST, true);
+    cyhal_gpio_write(ADC_RST, true);
     Cy_SysLib_Delay(500);
 
     // Declare the command and receive SPI buffers.
@@ -486,7 +487,7 @@ void ads1298_startup_procedure()
 
     // Send 16 dummy bytes to have 11 + 16 = 27
     command[0] = 0;
-    for (int k = 0; k < ADS1298_BYTES_PER_FRAME - 11; k++)
+    for (int k = 0; k < ADC_BYTES_PER_FRAME - 11; k++)
     {
     	send_command(command, 1, 1, 0);
     	Cy_SysLib_DelayUs(5);
@@ -514,7 +515,7 @@ void ads1298_startup_procedure()
     Cy_SysLib_Delay(10);
 
     // Set Start = 1
-    cyhal_gpio_write(ADS1298_START, true);
+    cyhal_gpio_write(ADC_START, true);
 
     // Send RDATAC
     command[0] = RDATAC;

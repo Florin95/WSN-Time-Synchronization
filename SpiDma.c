@@ -217,7 +217,7 @@ void RxDmaComplete(void)
     if(CY_DMA_INTR_CAUSE_COMPLETION == Cy_DMA_Channel_GetStatus(RxDma_HW, RxDma_CHANNEL))
     {
 	    /* Wait for at least t_CSSC and set CS HIGH */
-		cyhal_gpio_write(ADS1298_CS, true);
+		cyhal_gpio_write(ADC_CS, true);
 		rx_dma_done = 1;
 	}
 	else

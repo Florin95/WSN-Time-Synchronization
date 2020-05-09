@@ -5,7 +5,7 @@
 * Macros
 ******************************************************************************/
 #define SYNC_TYPE                      (TPSN)
-#define USE_ADC                        (1)
+#define USE_ADC                        (0)
 #define DEVICE_ID                      (USE_ADC)
 
 /* 0 - SNTP; 1 - TPSN */
@@ -34,7 +34,7 @@
 #define CLIENT_TASK_Q_TICKS_TO_TIMEOUT (100)
 #define RTOS_TASK_TICKS_TO_WAIT        (100)
 
-/*ADS1298 defines*/
+/*ADC defines*/
 #define ADC_SAMPLING_PERIOD_US  (500)
 #define CONFIG1_START           (0X01)
 #define CONFIG2_START           (0x02)
@@ -48,19 +48,19 @@
 #define CONFIG2                 (0x00)
 #define CONFIG3                 (0xC0)
 
-#define ADS1298_PDWN            (P9_0)
-#define ADS1298_RST             (P9_1)
-#define ADS1298_START           (P9_2)
-#define ADS1298_DRDY            (P0_2)
+#define ADC_PDWN            (P9_0)
+#define ADC_RST             (P9_1)
+#define ADC_START           (P9_2)
+#define ADC_DRDY            (P0_2)
 
-#define ADS1298_DEBUG           (P9_5)
+#define ADC_DEBUG           (P9_5)
 
 /******************************************************************************
 * Function Prototypes
 ******************************************************************************/
 void tcp_client_task(void *arg);
 void data_received_task(void *arg);
-void ads1298_startup_procedure();
+void adc_startup_procedure();
 void setup_drdy_interrupt();
 void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event);
 void init_tcp_client();

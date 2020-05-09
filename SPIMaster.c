@@ -43,7 +43,7 @@ uint32 initMaster(void)
 	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_MOSI_NUM, P10_0_SCB1_SPI_MOSI);
 	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_SCLK_NUM, P10_2_SCB1_SPI_CLK);
 	Cy_GPIO_SetHSIOM(SPI_PORT, SPI_SS_NUM,   P10_3_SCB1_SPI_SELECT0);
-	cyhal_gpio_init(ADS1298_CS, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
+	cyhal_gpio_init(ADC_CS, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, true);
 
     /* Configure SCB1 pins for SPI Master operation */
     Cy_GPIO_SetDrivemode(SPI_PORT, SPI_MISO_NUM, CY_GPIO_DM_HIGHZ);
@@ -138,7 +138,7 @@ void send_command(uint8_t* tr_buf, uint32_t buf_size, uint32_t chunk_size, uint3
 	else
 	{
 		/* Wait for at least t_CSSC and set CS HIGH */
-		cyhal_gpio_write(ADS1298_CS, false);
+		cyhal_gpio_write(ADC_CS, false);
 		Cy_SysLib_DelayUs(10);
 
 		/* Send multibyte command */
@@ -158,6 +158,6 @@ void send_command(uint8_t* tr_buf, uint32_t buf_size, uint32_t chunk_size, uint3
 
 		/* Wait for at least t_SCCS and set CS HIGH */
 		Cy_SysLib_DelayUs(10);
-		cyhal_gpio_write(ADS1298_CS, true);
+		cyhal_gpio_write(ADC_CS, true);
 	}
 }

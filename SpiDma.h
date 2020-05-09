@@ -19,7 +19,7 @@
 
 #define RX_DMA_DESCR0       (0u)
 
-#define ADS1298_BYTES_PER_FRAME         (27)
+#define ADC_BYTES_PER_FRAME         (27)
 
 /************************ Function Prototypes ********************************/
 uint32_t ConfigureTxDma(uint8_t* txBuffer);
