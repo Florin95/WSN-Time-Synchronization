@@ -73,22 +73,11 @@ void timer_init(void)
 	    cyhal_timer_stop(&tcp_send_timer);
  }
 
-/*******************************************************************************
-* Function Name: isr_timer
-********************************************************************************
-* Summary:
-* This is the interrupt handler function for the timer interrupt.
-*
-* Parameters:
-* 	callback_arg	Arguments passed to the interrupt callback
-*	event			Timer/counter interrupt triggers
-*
-*******************************************************************************/
+/* Interrupt handler function for the timer interrupt. */
 static void isr_timer(void *callback_arg, cyhal_timer_event_t event)
 {
     (void) callback_arg;
     (void) event;
-
 
 	/* Set the interrupt flag and process it from the main while(1) loop */
     timer_interrupt_flag = true;
@@ -140,7 +129,4 @@ static void isr_timer(void *callback_arg, cyhal_timer_event_t event)
 		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
 }
-
-/* [] END OF FILE */
-
 
