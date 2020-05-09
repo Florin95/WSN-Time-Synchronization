@@ -6,17 +6,17 @@
 ******************************************************************************/
 #define SYNC_TYPE                      (TPSN)
 #define USE_ADC                        (1)
+#define DEVICE_ID                      (USE_ADC)
 
 /* 0 - SNTP; 1 - TPSN */
 #define SNTP                           (0)
 #define TPSN                           (1)
 
-#define DEVICE_ID                      (USE_ADC)
 #define TPSN_SYNC_WORD                 (0xABABABAB)
 #define ALIGNMENT_WORD                 (0xA5A5A5A5)
 #define START_STREAM_CMD               (0xA0A0A0A0)
 
-#define SYNC_INTERVAL                  (15) // seconds
+#define SYNC_INTERVAL_US               (15000000) // microseconds
 
 #define DIG_IN                         (P5_0)
 
@@ -44,7 +44,7 @@
 #define SDATAC                  (0x11)
 #define RDATAC                  (0x10)
 #define CONFIG1                 (0x84) // 2KHz
-#define SAMPLING_PERIOD         (500)  // us
+#define SAMPLING_PERIOD_US         (500)  // us
 #define CONFIG2                 (0x00)
 #define CONFIG3                 (0xC0)
 

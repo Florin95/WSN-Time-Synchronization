@@ -13,7 +13,8 @@ bool timer_interrupt_flag = false;
 /* Timer object used for blinking the LED */
 cyhal_timer_t tcp_send_timer;
 volatile node_time_t node_time;
-volatile uint32_t period = 0;
+volatile uint32_t sampling_period_cnt = 0;
+volatile uint32_t do_sync_timer = 0;
 
 void timer_init(void)
 {
@@ -24,12 +25,12 @@ void timer_init(void)
 
     const cyhal_timer_cfg_t led_blink_timer_cfg = \
     {
-        .compare_value = 0,                 /* Timer compare value, not used */
-        .period = TCP_TIMER_PERIOD,         /* Defines the timer period */
-        .direction = CYHAL_TIMER_DIR_UP,    /* Timer counts up */
-        .is_compare = false,                /* Don't use compare mode */
-        .is_continuous = true,             /* Run timer indefinitely */
-        .value = 0                          /* Initial value of counter */
+        .compare_value = 0,                  /* Timer compare value, not used */
+        .period = TCP_TIMER_PERIOD,          /* Defines the timer period */
+        .direction = CYHAL_TIMER_DIR_UP,     /* Timer counts up */
+        .is_compare = false,                 /* Don't use compare mode */
+        .is_continuous = true,               /* Run timer indefinitely */
+        .value = 0                           /* Initial value of counter */
     };
 
     /* Initialize the timer object. Does not use pin output ('pin' is NC) and
@@ -88,21 +89,24 @@ static void isr_timer(void *callback_arg, cyhal_timer_event_t event)
     (void) callback_arg;
     (void) event;
 
+
 	/* Set the interrupt flag and process it from the main while(1) loop */
     timer_interrupt_flag = true;
-    period = period + TCP_TIMER_PERIOD;
+    sampling_period_cnt = sampling_period_cnt + TCP_TIMER_PERIOD;
+    do_sync_timer = do_sync_timer + TCP_TIMER_PERIOD;
 
-    if ((node_time.seconds % SYNC_INTERVAL == 0) && (node_time.microseconds == 0) && (SYNC_TYPE == TPSN))
+    if ((do_sync_timer >= SYNC_INTERVAL_US) && (SYNC_TYPE == TPSN))
     {
     	do_tpsn_sync = 1;
+    	do_sync_timer = 0;
     }
 
     node_time.seconds = node_time.seconds + (node_time.microseconds + TCP_TIMER_PERIOD) / 1000000;
     node_time.microseconds = (node_time.microseconds + TCP_TIMER_PERIOD) % 1000000;
 
-    if ((period >= SAMPLING_PERIOD) && (USE_ADC == 0))
+    if ((sampling_period_cnt >= SAMPLING_PERIOD_US) && (USE_ADC == 0))
     {
-    	period = 0;
+    	sampling_period_cnt = 0;
 
     	if (SYNC_TYPE == SNTP)
     	{

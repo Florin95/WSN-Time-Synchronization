@@ -1,4 +1,4 @@
-function [ts, data, seconds] = CheckTS(fileName)
+function [sync, ts, data, seconds] = CheckTS(fileName)
 
 fileID = fopen(fileName, 'r');
 
@@ -6,6 +6,7 @@ A = fread(fileID, Inf, 'uint32');
 fclose(fileID);
 
 % Extract each field
+sync = A(1:4:end);
 ts_s = A(2:4:end);
 ts_f = A(3:4:end); 
 data = A(4:4:end);

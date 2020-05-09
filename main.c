@@ -228,16 +228,21 @@ void data_received_task(void *arg)
 						volatile uint64_t t2 = (uint64_t)message[3] * 1000000 + message[4];
 						volatile uint64_t t3 = (uint64_t)message[5] * 1000000 + message[6];
 						// The time at which the sync packet was received
+						__disable_irq();
 						volatile uint64_t t4 = (uint64_t)node_time.seconds * 1000000 + node_time.microseconds;
+						__enable_irq();
 
 						volatile uint64_t delta = 0;
 						delta = (uint64_t)(((t2 - t1) - (t4 - t3)) / 2);
 
 						sec_offset = (int32_t)(delta / 1000000);
 						microsec_offset = (int32_t)(delta % 1000000);
-						update_time(sec_offset, microsec_offset);
 
-						sync_done = 1;
+						if (sec_offset < 2000000)
+						{
+							update_time(sec_offset, microsec_offset);
+							sync_done = 1;
+						}
 					}
 	            }
 	            while (netbuf_next(netbuf) >= 0);
