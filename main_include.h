@@ -4,8 +4,8 @@
 /******************************************************************************
 * Macros
 ******************************************************************************/
-#define SYNC_TYPE                      (TPSN)
-#define USE_ADC                        (0)
+#define SYNC_TYPE                      (SNTP)
+#define USE_ADC                        (1)
 #define DEVICE_ID                      (USE_ADC)
 
 /* 0 - SNTP; 1 - TPSN */

@@ -29,6 +29,8 @@ grid on;
 
 sync0_ts = ts0(sync0 == TPSN_SYNC_WORD);
 sync1_ts = ts1(sync1 == TPSN_SYNC_WORD);
+sync_line_0 = [];
+sync_line_1 = [];
 
 for i=1:length(sync0_ts)
     sync_line_0 = line([sync0_ts(i), sync0_ts(i)], [0,15000], 'color', 'green', ...
