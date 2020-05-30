@@ -93,15 +93,17 @@ static void isr_timer(void *callback_arg, cyhal_timer_event_t event)
     node_time.seconds = node_time.seconds + (node_time.microseconds + TCP_TIMER_PERIOD) / 1000000;
     node_time.microseconds = (node_time.microseconds + TCP_TIMER_PERIOD) % 1000000;
 
-    if ((sampling_period_cnt >= SAMPLING_PERIOD_US) && (USE_ADC == 0))
+    if (sampling_period_cnt >= SAMPLING_PERIOD_US)
     {
-    	sampling_period_cnt = 0;
-
     	if (SYNC_TYPE == SNTP)
     	{
     		compute_sntp_timestamps();
     	}
+    }
 
+    if ((sampling_period_cnt >= SAMPLING_PERIOD_US) && (USE_ADC == 0))
+    {
+    	sampling_period_cnt = 0;
         tcp_data_packet_t tcp_packet;
 
     	BaseType_t xHigherPriorityTaskWoken;

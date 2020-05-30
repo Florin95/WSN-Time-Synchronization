@@ -151,19 +151,14 @@ void compute_sntp_timestamps()
 	}
 	else
 	{
-		second_temp = second_temp + (fraction_temp + ADC_SAMPLING_PERIOD_US) / 1000000;
-		fraction_temp = (fraction_temp + ADC_SAMPLING_PERIOD_US) % 1000000;
+		second_temp = second_temp + (fraction_temp + TIME_UPDATE_PERIOD) / 1000000;
+		fraction_temp = (fraction_temp + TIME_UPDATE_PERIOD) % 1000000;
 	}
 }
 
 /* Interrupt handler callback function */
 void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event)
 {
-	if (SYNC_TYPE == SNTP)
-	{
-		compute_sntp_timestamps();
-	}
-
 	/* Wait for at least t_CSSC and set CS HIGH */
 	cyhal_gpio_write(ADC_CS, false);
 	sendPacket();
@@ -184,13 +179,44 @@ void update_time(int32_t sec_offset, int32_t microsec_offset)
     __enable_irq();
 }
 
+/* Processes the synchronization message and updates the local time.*/
+void process_sync_message(uint32_t *message, uint16_t message_len)
+{
+	int32_t sec_offset = 0;
+	int32_t microsec_offset = 0;
+
+	// Sent back by the TCP server
+	volatile uint64_t t1 = (uint64_t)message[1] * 1000000 + message[2];
+	// t2 and t3 are server timestamps
+	volatile uint64_t t2 = (uint64_t)message[3] * 1000000 + message[4];
+	volatile uint64_t t3 = (uint64_t)message[5] * 1000000 + message[6];
+	// The time at which the sync packet was received
+	__disable_irq();
+	volatile uint64_t t4 = (uint64_t)node_time.seconds * 1000000 + node_time.microseconds;
+	__enable_irq();
+
+	volatile uint64_t delta = 0;
+	delta = (uint64_t)(((t2 - t1) - (t4 - t3)) / 2);
+
+	sec_offset = (int32_t)(delta / 1000000);
+	microsec_offset = (int32_t)(delta % 1000000);
+
+	// If seconds offset is bigger than a threshold, then the value is corrupted and
+	// should be discarded.
+	if (sec_offset < 2000000)
+	{
+		update_time(sec_offset, microsec_offset);
+		sync_done = 1;
+	}
+}
+
 /* Task used to receive data from other devices.*/
 void data_received_task(void *arg)
 {
     struct netbuf* netbuf = NULL;
     uint8_t *ptr;
     uint16_t plen = 0;
-    volatile uint32_t *message;
+    uint32_t *message;
     uint16_t message_len = 0;
     volatile err_t recv_err;
 
@@ -198,6 +224,7 @@ void data_received_task(void *arg)
 	{
 		if(tcp_task_started)
 		{
+			// netconn_recv() blocks the task until data is available on connection conn.
 	        while (( recv_err = netconn_recv(conn, &netbuf)) == ERR_OK)
 	        {
 	            do
@@ -206,43 +233,14 @@ void data_received_task(void *arg)
 	                message = (uint32_t*)ptr;
 	                message_len = plen / 4;
 
-					for(int i = 0; i < plen; i++)
-					{
-						printf("%c", ptr[i]);
-					}
-					printf("\n");
-
-					if (message[0] == START_STREAM_CMD)
+					if (message[1] == START_STREAM_CMD)
 					{
 						stream_data = 1;
 						printf("Streaming started! \n");
 					}
 					else if (message[0] == TPSN_SYNC_WORD)
 					{
-						int32_t sec_offset = 0;
-						int32_t microsec_offset = 0;
-
-						// Sent back by the TCP server
-						volatile uint64_t t1 = (uint64_t)message[1] * 1000000 + message[2];
-						// t2 and t3 are server timestamps
-						volatile uint64_t t2 = (uint64_t)message[3] * 1000000 + message[4];
-						volatile uint64_t t3 = (uint64_t)message[5] * 1000000 + message[6];
-						// The time at which the sync packet was received
-						__disable_irq();
-						volatile uint64_t t4 = (uint64_t)node_time.seconds * 1000000 + node_time.microseconds;
-						__enable_irq();
-
-						volatile uint64_t delta = 0;
-						delta = (uint64_t)(((t2 - t1) - (t4 - t3)) / 2);
-
-						sec_offset = (int32_t)(delta / 1000000);
-						microsec_offset = (int32_t)(delta % 1000000);
-
-						if (sec_offset < 2000000)
-						{
-							update_time(sec_offset, microsec_offset);
-							sync_done = 1;
-						}
+						process_sync_message(message, message_len);
 					}
 	            }
 	            while (netbuf_next(netbuf) >= 0);

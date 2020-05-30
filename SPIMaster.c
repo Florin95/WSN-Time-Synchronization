@@ -24,12 +24,10 @@ const cy_stc_scb_spi_config_t mSPI_config =
 };
 
 extern volatile uint32_t txDmaDone;
-/* Allocate context for SPI operation */
 extern cy_stc_scb_spi_context_t spiContext;
 
 /******************************************************************************
-* This function initializes the SPI Master based on the
-* configuration done in design.modus file.
+* This function initializes the SPI Master.
 ******************************************************************************/
 uint32 initMaster(void)
 {
@@ -54,11 +52,6 @@ uint32 initMaster(void)
     /* Connect assigned divider to be a clock source for SPI */
     Cy_SysClk_PeriphAssignDivider(PCLK_SCB1_CLOCK, SPI_CLK_DIV_TYPE, SPI_CLK_DIV_NUM);
 
-    /* SPI master desired data rate is 1 Mbps.
-    * The SPI master data rate = (clk_scb / Oversample).
-    * For clk_peri = 50 MHz, select divider value 5 and get SCB clock = (50 MHz / 5) = 10 MHz.
-    * Select Oversample = 10. These setting results SPI data rate = 10 MHz / 10 = 1 Mbps.
-    */
     Cy_SysClk_PeriphSetDivider   (SPI_CLK_DIV_TYPE, SPI_CLK_DIV_NUM, 1UL);
     Cy_SysClk_PeriphEnableDivider(SPI_CLK_DIV_TYPE, SPI_CLK_DIV_NUM);
 
@@ -80,8 +73,7 @@ uint32 initMaster(void)
 }
 
 /******************************************************************************
-* This function sends the data to the slave. Note that the below
-* function is blocking until all the bytes are transferred.
+* This function sends the data to the slave.
 ******************************************************************************/
 void sendPacket(void)
 {
@@ -123,10 +115,6 @@ uint32 checkTranferStatus(void)
 
 /**
  * Send SPI data using the CPU.
- * @param tr_buf
- * @param buf_size
- * @param chunk_size
- * @param command_delay_us
  */
 void send_command(uint8_t* tr_buf, uint32_t buf_size, uint32_t chunk_size, uint32_t command_delay_us)
 {

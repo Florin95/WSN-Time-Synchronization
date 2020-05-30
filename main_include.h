@@ -35,7 +35,8 @@
 #define RTOS_TASK_TICKS_TO_WAIT        (100)
 
 /*ADC defines*/
-#define ADC_SAMPLING_PERIOD_US  (500)
+#define TIME_UPDATE_PERIOD      (SAMPLING_PERIOD_US)
+#define ADC_SAMPLING_PERIOD_US  (SAMPLING_PERIOD_US)
 #define CONFIG1_START           (0X01)
 #define CONFIG2_START           (0x02)
 #define CONFIG3_START           (0x03)
@@ -44,7 +45,7 @@
 #define SDATAC                  (0x11)
 #define RDATAC                  (0x10)
 #define CONFIG1                 (0x84) // 2KHz
-#define SAMPLING_PERIOD_US         (500)  // us
+#define SAMPLING_PERIOD_US      (500)  // us
 #define CONFIG2                 (0x00)
 #define CONFIG3                 (0xC0)
 
@@ -66,6 +67,7 @@ void drdy_interrupt_handler(void *handler_arg, cyhal_gpio_irq_event_t event);
 void init_tcp_client();
 void initialize_sntp(void);
 void compute_sntp_timestamps();
+void process_sync_message(uint32_t *message, uint16_t message_len);
 
 /******************************************************************************
 * Variables
